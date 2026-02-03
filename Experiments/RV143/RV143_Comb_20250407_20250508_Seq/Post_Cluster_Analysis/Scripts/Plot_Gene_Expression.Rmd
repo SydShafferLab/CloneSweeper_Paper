@@ -1,0 +1,937 @@
+---
+title: "Plot_Gene_Expression"
+output: html_document
+date: "2025-06-15"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+
+library(egg)
+
+library(Cairo)
+
+set.seed(1)
+
+```
+
+
+#Set font size and type:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+point_size <- 0.01
+jitter_width <- 0.2
+point_stroke_weight <- 0.05
+box_line_width <- 0.2
+nudge_size <- 0.25
+
+panel_dimensions <- c(0.4,1)
+
+```
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+
+```
+
+#Load FindMarkers to check significance:
+```{r, include=FALSE}
+
+
+markers_untranduced_vs_transduced <- read.csv("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Compare_Differential_Expression/markers_untranduced_vs_transduced.csv", row.names = 1)
+
+markers_targeted_vs_not <- read.csv("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Compare_Differential_Expression/markers_targeted_vs_not.csv", row.names = 1)
+
+```
+
+#Subset to only look at enriched set:
+```{r, include=FALSE}
+
+enriched_only <- subset(x=seurat_strict_barcode_requirements, subset = orig.ident == "Enriched")
+
+```
+
+#Find markers for all cells assigned a lineage barcode:
+```{r, include=FALSE}
+
+#Change idents to be linage barcode assignment:
+Idents(enriched_only) <- enriched_only$has_targeted_lineage_barcode
+
+```
+
+#Isolate data for DCT:
+```{r}
+
+#See if DCT is significant:
+print(markers_targeted_vs_not["DCT",])
+
+#Create dataframe for DCT expression:
+DCT_df <- FetchData(enriched_only, 
+                      vars = c("DCT", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(DCT_df)
+
+#Identify outliers for plotting:
+DCT_df <- DCT_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = DCT < quantile(DCT, 0.25) - 1.5*IQR(DCT) | 
+                      DCT > quantile(DCT, 0.75) + 1.5*IQR(DCT)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(DCT_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot DCT as a simple boxplot:
+```{r}
+
+p <- ggplot(DCT_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = DCT,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(DCT_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("DCT\nAdj. p-value:\n", format(markers_targeted_vs_not["DCT",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/DCT_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+#Remove DCT dataframe:
+```{r, include=FALSE}
+
+rm(DCT_df)
+
+```
+
+
+
+#Isolate data for PMEL:
+```{r}
+
+#See if PMEL is significant:
+print(markers_targeted_vs_not["PMEL",])
+
+#Create dataframe for PMEL expression:
+PMEL_df <- FetchData(enriched_only, 
+                      vars = c("PMEL", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(PMEL_df)
+
+#Identify outliers for plotting:
+PMEL_df <- PMEL_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = PMEL < quantile(PMEL, 0.25) - 1.5*IQR(PMEL) | 
+                      PMEL > quantile(PMEL, 0.75) + 1.5*IQR(PMEL)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(PMEL_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot PMEL as a simple boxplot:
+```{r}
+
+p <- ggplot(PMEL_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = PMEL,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(PMEL_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("PMEL\nAdj. p-value:\n", format(markers_targeted_vs_not["PMEL",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/PMEL_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+#Remove PMEL dataframe:
+```{r, include=FALSE}
+
+rm(PMEL_df)
+
+```
+
+
+
+#Isolate data for IGFBP7:
+```{r}
+
+
+#See if IGFBP7 is significant:
+print(markers_targeted_vs_not["IGFBP7",])
+
+#Create dataframe for IGFBP7 expression:
+IGFBP7_df <- FetchData(enriched_only, 
+                      vars = c("IGFBP7", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(IGFBP7_df)
+
+#Identify outliers for plotting:
+IGFBP7_df <- IGFBP7_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = IGFBP7 < quantile(IGFBP7, 0.25) - 1.5*IQR(IGFBP7) | 
+                      IGFBP7 > quantile(IGFBP7, 0.75) + 1.5*IQR(IGFBP7)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(IGFBP7_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot IGFBP7 as a simple boxplot:
+```{r}
+
+p <- ggplot(IGFBP7_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = IGFBP7,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(IGFBP7_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle("IGFBP7") +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/IGFBP7_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+#Remove IGFBP7 dataframe:
+```{r, include=FALSE}
+
+rm(IGFBP7_df)
+
+```
+
+
+
+
+
+
+#Isolate data for TYR:
+```{r}
+
+#See if TYR is significant:
+print(markers_targeted_vs_not["TYR",])
+
+#Create dataframe for TYR expression:
+TYR_df <- FetchData(enriched_only, 
+                      vars = c("TYR", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(TYR_df)
+
+#Identify outliers for plotting:
+TYR_df <- TYR_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = TYR < quantile(TYR, 0.25) - 1.5*IQR(TYR) | 
+                      TYR > quantile(TYR, 0.75) + 1.5*IQR(TYR)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(TYR_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot TYR as a simple boxplot:
+```{r}
+
+p <- ggplot(TYR_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = TYR,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(TYR_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("TYR\nAdj. p-value:\n", format(markers_targeted_vs_not["TYR",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/TYR_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+#Remove TYR dataframe:
+```{r, include=FALSE}
+
+rm(TYR_df)
+
+```
+
+
+
+
+#Isolate data for CD44:
+```{r}
+
+#See if CD44 is significant:
+print(markers_targeted_vs_not["CD44",])
+
+#Create dataframe for CD44 expression:
+CD44_df <- FetchData(enriched_only, 
+                      vars = c("CD44", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(CD44_df)
+
+#Identify outliers for plotting:
+CD44_df <- CD44_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = CD44 < quantile(CD44, 0.25) - 1.5*IQR(CD44) | 
+                      CD44 > quantile(CD44, 0.75) + 1.5*IQR(CD44)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(CD44_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot CD44 as a simple boxplot:
+```{r}
+
+p <- ggplot(CD44_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = CD44,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(CD44_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("CD44\nAdj. p-value:\n", format(markers_targeted_vs_not["CD44",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/CD44_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+
+#Remove CD44 dataframe:
+```{r, include=FALSE}
+
+rm(CD44_df)
+
+```
+
+
+
+
+
+
+#Isolate data for CD59:
+```{r}
+
+#See if CD59 is significant:
+print(markers_targeted_vs_not["CD59",])
+
+#Create dataframe for CD59 expression:
+CD59_df <- FetchData(enriched_only, 
+                      vars = c("CD59", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(CD59_df)
+
+#Identify outliers for plotting:
+CD59_df <- CD59_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = CD59 < quantile(CD59, 0.25) - 1.5*IQR(CD59) | 
+                      CD59 > quantile(CD59, 0.75) + 1.5*IQR(CD59)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(CD59_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot CD59 as a simple boxplot:
+```{r}
+
+p <- ggplot(CD59_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = CD59,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(CD59_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("CD59\nAdj. p-value:\n", format(markers_targeted_vs_not["CD59",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/CD59_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+
+#Remove CD59 dataframe:
+```{r, include=FALSE}
+
+rm(CD59_df)
+
+```
+
+
+
+
+#Isolate data for HRAS:
+```{r}
+
+#See if HRAS is significant:
+print(markers_targeted_vs_not["HRAS",])
+
+#Create dataframe for HRAS expression:
+HRAS_df <- FetchData(enriched_only, 
+                      vars = c("HRAS", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(HRAS_df)
+
+#Identify outliers for plotting:
+HRAS_df <- HRAS_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = HRAS < quantile(HRAS, 0.25) - 1.5*IQR(HRAS) | 
+                      HRAS > quantile(HRAS, 0.75) + 1.5*IQR(HRAS)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(HRAS_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot HRAS as a simple boxplot:
+```{r}
+
+p <- ggplot(HRAS_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = HRAS,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(HRAS_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("HRAS\nAdj. p-value:\n", format(markers_targeted_vs_not["HRAS",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/HRAS_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+#Remove HRAS dataframe:
+```{r, include=FALSE}
+
+rm(HRAS_df)
+
+```
+
+
+
+
+#Isolate data for MYOF:
+```{r}
+
+#See if MYOF is significant:
+print(markers_targeted_vs_not["MYOF",])
+
+#Create dataframe for MYOF expression:
+MYOF_df <- FetchData(enriched_only, 
+                      vars = c("MYOF", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(MYOF_df)
+
+#Identify outliers for plotting:
+MYOF_df <- MYOF_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = MYOF < quantile(MYOF, 0.25) - 1.5*IQR(MYOF) | 
+                      MYOF > quantile(MYOF, 0.75) + 1.5*IQR(MYOF)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(MYOF_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot MYOF as a simple boxplot:
+```{r}
+
+p <- ggplot(MYOF_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = MYOF,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(MYOF_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("MYOF\nAdj. p-value:\n", format(markers_targeted_vs_not["MYOF",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/MYOF_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+#Remove MYOF dataframe:
+```{r, include=FALSE}
+
+rm(MYOF_df)
+
+```
+
+
+
+
+#Isolate data for MKI67:
+```{r}
+
+#See if MKI67 is significant:
+print(markers_targeted_vs_not["MKI67",])
+
+#Create dataframe for MKI67 expression:
+MKI67_df <- FetchData(enriched_only, 
+                      vars = c("MKI67", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(MKI67_df)
+
+#Identify outliers for plotting:
+MKI67_df <- MKI67_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = MKI67 < quantile(MKI67, 0.25) - 1.5*IQR(MKI67) | 
+                      MKI67 > quantile(MKI67, 0.75) + 1.5*IQR(MKI67)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(MKI67_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+#Plot MKI67 as a simple boxplot:
+```{r}
+
+p <- ggplot(MKI67_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = MKI67,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(MKI67_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("MKI67\nAdj. p-value:\n", format(markers_targeted_vs_not["MKI67",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/MKI67_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+
+#Remove MKI67 dataframe:
+```{r, include=FALSE}
+
+rm(MKI67_df)
+
+```
+
+
+
+
+
+#Isolate data for MLANA:
+```{r}
+
+#See if MLANA is significant:
+print(markers_targeted_vs_not["MLANA",])
+
+#Create dataframe for MLANA expression:
+MLANA_df <- FetchData(enriched_only, 
+                      vars = c("MLANA", "Mini_Library_Assignment","has_targeted_lineage_barcode"),
+                      layer = 'data')
+
+#Save row names:
+original_rownames <- rownames(MLANA_df)
+
+#Identify outliers for plotting:
+MLANA_df <- MLANA_df %>%
+  group_by(has_targeted_lineage_barcode) %>%
+  mutate(is_outlier = MLANA < quantile(MLANA, 0.25) - 1.5*IQR(MLANA) | 
+                      MLANA > quantile(MLANA, 0.75) + 1.5*IQR(MLANA)) %>%
+  ungroup() %>%
+  as.data.frame()
+
+# Restore row names
+rownames(MLANA_df) <- original_rownames
+
+#Remove row names list:
+rm(original_rownames)
+
+```
+
+
+#Plot MLANA as a simple boxplot:
+```{r}
+
+p <- ggplot(MLANA_df,
+       aes(x = factor(has_targeted_lineage_barcode, 
+                     levels = c("Not_Targeted_Lineage_Barcode", "Targeted_Lineage_Barcode"),
+                     labels = c("Non-Enriched", "Enriched")), 
+           y = MLANA,
+           color = factor(has_targeted_lineage_barcode))) +
+  geom_boxplot( outlier.shape = NA,
+                width = jitter_width/0.533) +
+  geom_jitter(data = subset(MLANA_df, is_outlier == TRUE),
+              width = jitter_width,
+              height = 0,
+              size = point_size,
+              shape = 16) + #Set outliers to dot without border
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    legend.position = "none"
+  ) +
+  xlab("") +
+  ylab("Normalized Expression") +
+  ggtitle(paste("MLANA\nAdj. p-value:\n", format(markers_targeted_vs_not["MLANA",]$p_val_adj, scientific = TRUE, digits = 3))) +
+  scale_color_manual(values = c("Not_Targeted_Lineage_Barcode" = "gray60", 
+                              "Targeted_Lineage_Barcode" = "#CC6677"), guide = "none") +
+  scale_y_continuous(limits = c(0, NA), expand = expansion(mult = c(0, 0.05)))
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Gene_Expression/MLANA_Box_Plot_Only.pdf", device = cairo_pdf, width = 2, height = 3)
+  
+```
+
+
+#Remove MLANA dataframe:
+```{r, include=FALSE}
+
+rm(MLANA_df)
+
+```

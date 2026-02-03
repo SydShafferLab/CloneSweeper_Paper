@@ -1,0 +1,369 @@
+---
+title: "UMAP_Analysis"
+output: html_document
+date: "2025-08-18"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(ggplot2)
+library(scattermore)
+library(dplyr)
+
+library(ggh4x)
+
+library(Polychrome)
+
+library(egg)
+
+getwd()
+
+set.seed(1)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Load cell-cycle genes:
+```{r, include=FALSE}
+
+s.genes <- cc.genes$s.genes
+g2m.genes <- cc.genes$g2m.genes
+
+```
+
+#Add cell cycle scores:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- CellCycleScoring(seurat_strict_barcode_requirements, s.features = s.genes, g2m.features = g2m.genes, set.ident = TRUE)
+
+Idents(seurat_strict_barcode_requirements) <- seurat_strict_barcode_requirements$Phase
+
+DimPlot(seurat_strict_barcode_requirements, reduction = "umap")
+
+head(seurat_strict_barcode_requirements$Phase)
+
+```
+
+#Regress out cell cycle:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- ScaleData(seurat_strict_barcode_requirements, assay = "RNA", vars.to.regress = c("S.Score", "G2M.Score"), features = rownames(seurat_strict_barcode_requirements))
+
+#View current assays:
+Assays(seurat_strict_barcode_requirements)
+Layers(seurat_strict_barcode_requirements)
+
+
+```
+
+#Generate dimension reduction without cell cycle:
+```{r}
+
+seurat_strict_barcode_requirements <- FindVariableFeatures(seurat_strict_barcode_requirements)
+
+seurat_strict_barcode_requirements <- RunPCA(seurat_strict_barcode_requirements, features = VariableFeatures(object = seurat_strict_barcode_requirements))
+
+seurat_strict_barcode_requirements <- FindNeighbors(seurat_strict_barcode_requirements, dims = 1:10)
+seurat_strict_barcode_requirements <- FindClusters(seurat_strict_barcode_requirements, resolution = 0.5)
+
+seurat_strict_barcode_requirements <- RunUMAP(seurat_strict_barcode_requirements, dims = 1:10)
+
+#Plot cell cycle score with cell-cycle regressed out:
+DimPlot(seurat_strict_barcode_requirements, reduction = "umap")
+
+```
+
+#Save seurat object with cell cycle regressed out:
+
+```{r, include=FALSE}
+
+saveRDS(seurat_strict_barcode_requirements,"RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements_cell_cycle_regression")
+
+```
+
+#Load cell cycle regressed out seurat object:
+
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements_cell_cycle_regression")
+
+```
+
+#Get umap data into a dataframe:
+```{r, include=FALSE}
+
+umap_embeddings <- as.data.frame(Embeddings(seurat_strict_barcode_requirements, reduction = "umap"))
+
+#Add lineage assignment to umap_embeddings 
+umap_embeddings <- cbind(umap_embeddings, seurat_strict_barcode_requirements$Mini_Library_Assignment)
+
+#Add orignal identity to umap_embeddings 
+umap_embeddings <- cbind(umap_embeddings, seurat_strict_barcode_requirements$orig.ident)
+
+colnames(umap_embeddings) <- c("umap_1", "umap_2", "Mini_Library_Assignment", "Protocol")
+
+```
+
+#Get UMAP ranges for consistent point sizes and plot sizes:
+```{r, include=FALSE}
+
+#Get ranges for consistent plotting:
+
+#Get UMAP ranges for consistent point sizes and plot sizes:
+umap_range_x <- max(umap_embeddings$umap_1) - min(umap_embeddings$umap_1)
+umap_range_y <- max(umap_embeddings$umap_2) - min(umap_embeddings$umap_2)
+
+# Define max_range for equal scaling
+max_range <- max(umap_range_x, umap_range_y)
+
+x_center <- mean(range(umap_embeddings$umap_1))
+y_center <- mean(range(umap_embeddings$umap_2))
+
+x_limits <- c(x_center - max_range/2, x_center + max_range/2)
+y_limits <- c(y_center - max_range/2, y_center + max_range/2)
+
+#Set panel size:
+panel_size <- unit(1.5, "in")
+
+```
+
+#Create a column for enriched vs non-enriched lineages:
+```{r, include=FALSE}
+
+#Get if cell has targeted lineage barcode:
+umap_embeddings$has_targeted_lineage_barcode <- seurat_strict_barcode_requirements$has_targeted_lineage_barcode
+
+#Create dataframe with just transduced:
+transduced_only_umap_embeddings <- umap_embeddings[umap_embeddings$Protocol == "Enriched",]
+
+#Get dataframe with enriched lineage barcodes only for plotting to the front:
+enriched_umap_embeddings <- transduced_only_umap_embeddings[transduced_only_umap_embeddings$has_targeted_lineage_barcode == "Targeted_Lineage_Barcode",]
+
+#Get dataframe without enriched lineage barcodes for plotting in back:
+non_enriched_umap_embeddings <- transduced_only_umap_embeddings[transduced_only_umap_embeddings$has_targeted_lineage_barcode == "Not_Targeted_Lineage_Barcode",]
+
+```
+
+
+#Set panel size for UMAPs without axes:
+```{r, include=FALSE}
+
+#Set panel size:
+panel_size <- unit(2, "in")
+
+```
+
+#Plot all lineage barcodes together:
+```{r}
+
+ggplot() +
+  scattermore::geom_scattermore(data = non_enriched_umap_embeddings, 
+                                aes(x = umap_1, y = umap_2, color = has_targeted_lineage_barcode),
+                                pointsize = 2, 
+                                pixels = c(umap_range_x*50, umap_range_x*50)) +
+  scattermore::geom_scattermore(data = enriched_umap_embeddings, 
+                                aes(x = umap_1, y = umap_2, color = Mini_Library_Assignment),
+                                pointsize = 5, 
+                                pixels = c(umap_range_x*50, umap_range_x*50)) +
+  scale_color_manual(values = c("Non-Enriched" = "grey",
+                                "TCGAGCGTGCTAGCGTTCCC" = "black",
+                                "CGGTCGTATCCTTGGAGGTA" = "#654522",
+                                "TGAACGGTCCTTAGGTGGCT" = "#8db600",
+                                "TGTTCGTTCGGATGCTAGGT" = "#a1caf1",
+                                "GCCAGCATGCATTGGTGCCA" = "#be0032",
+                                "TGTAGGGAACATAGTATGAT" = "#c2b280",
+                                "GGGTACGACGAACCGTACGA" = "#008856",
+                                "GGATCGCAGCTAGGTAGGCT" = "#e68fac",
+                                "GCTATGTTGCAAGCATTGAT" = "#0067a5",
+                                "ACTATCATTGCAAGCTTCGA" = "#2b3d26",
+                                "CGAAGGGAGCTAGCTTACGT" = "#604e97",
+                                "TCGAGGTTAGATTCTATCTT" = "#f6a600",
+                                "GGGTTCAAACTATCCATGAT" = "#b3446c",
+                                "GGGAAGGTGGGTGGGAGCGT" = "#dcd300",
+                                "GGTTGGTAAGTTTGTTAGGA" = "#882d17"
+                                )) + 
+  labs(x = "UMAP 1", y = "UMAP 2") +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits) +
+  theme_void() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", angle = 90),
+    legend.position = "none"
+  ) +
+  coord_fixed(ratio = 1) +
+  force_panelsizes(rows = panel_size, cols = panel_size)
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Cell_Cycle_UMAPs/Targeted_Barcodes_Together.pdf", 
+       plot = last_plot(), width = 2, height = 2, device = cairo_pdf)
+
+
+```
+
+
+#Plot all enriched lineage barcodes together, without non-enriched barcodes:
+```{r}
+
+p <- ggplot() +
+  #Add a rasterized data to ensure alignment:
+  scattermore::geom_scattermore(data = umap_embeddings, 
+                                aes(x = umap_1, y = umap_2),
+                                pointsize = 0,
+                                pixels = c(umap_range_x*50, umap_range_x*50),
+                                alpha = 0) +
+  geom_point(data = enriched_umap_embeddings, 
+                                aes(x = umap_1, y = umap_2, color = Mini_Library_Assignment),
+                                size = 1,
+                                stroke = 0) +
+  scale_color_manual(values = c("Non-Enriched" = "grey",
+                                "TCGAGCGTGCTAGCGTTCCC" = "#604e97",
+                                "CGGTCGTATCCTTGGAGGTA" = "#654522",
+                                "TGAACGGTCCTTAGGTGGCT" = "#8db600",
+                                "TGTTCGTTCGGATGCTAGGT" = "#a1caf1",
+                                "GCCAGCATGCATTGGTGCCA" = "#be0032",
+                                "TGTAGGGAACATAGTATGAT" = "#c2b280",
+                                "GGGTACGACGAACCGTACGA" = "#008856",
+                                "GGATCGCAGCTAGGTAGGCT" = "#e68fac",
+                                "GCTATGTTGCAAGCATTGAT" = "#0067a5",
+                                "ACTATCATTGCAAGCTTCGA" = "#2b3d26",
+                                "CGAAGGGAGCTAGCTTACGT" = "grey50",
+                                "TCGAGGTTAGATTCTATCTT" = "#f6a600",
+                                "GGGTTCAAACTATCCATGAT" = "#b3446c",
+                                "GGGAAGGTGGGTGGGAGCGT" = "#dcd300",
+                                "GGTTGGTAAGTTTGTTAGGA" = "#882d17"
+                                )) + 
+  labs(x = "UMAP 1", y = "UMAP 2") +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits) +
+  theme_void() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", angle = 90),
+    legend.position = "none"
+  ) +
+  coord_fixed(ratio = 1)
+
+p
+
+p <- egg::set_panel_size(p, width = panel_size, height = panel_size)
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Cell_Cycle_UMAPs/Targeted_Barcodes_Together_No_NonEnriched.pdf", width = 4, height = 4, device = cairo_pdf)
+
+
+```
+
+
+#Plot UMAP of source without background:
+```{r}
+
+p <- ggplot(umap_embeddings, aes(x = umap_1, y = umap_2, color = Protocol)) +
+  scattermore::geom_scattermore(pointsize = 2, 
+                                pixels = c(umap_range_x*50, umap_range_x*50)) + 
+  scale_color_discrete(breaks = c("Untransduced","Enriched"), 
+                      labels = c("Untransduced" = "Enrichment Library Negative",
+                                "Enriched" = "Enrichment Library Positive")) +
+  labs(x = "UMAP 1", y = "UMAP 2") +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits) +
+  theme_void() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", angle = 90)
+  ) +
+  coord_fixed(ratio = 1)
+
+p
+
+p <- egg::set_panel_size(p, width = panel_size, height = panel_size)
+
+
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Cell_Cycle_UMAPs/Source_UMAP.pdf", width = 4, height = 4, device = cairo_pdf)
+
+
+```
+
+
+#Plot UMAP of targeted barcodes in enrichment library negative:
+```{r}
+
+p <- ggplot() +
+  #Add a rasterized data to ensure alignment:
+  scattermore::geom_scattermore(data = umap_embeddings, 
+                                aes(x = umap_1, y = umap_2),
+                                pointsize = 0,
+                                pixels = c(umap_range_x*50, umap_range_x*50),
+                                alpha = 0) +
+  geom_point(data = umap_embeddings[(umap_embeddings$Protocol == "Untransduced") & (umap_embeddings$has_targeted_lineage_barcode == "Targeted_Lineage_Barcode"),], 
+                                aes(x = umap_1, y = umap_2, color = Mini_Library_Assignment),
+                                size = 1,
+                                stroke = 0) +
+  scale_color_manual(values = c("Non-Enriched" = "grey",
+                                "TCGAGCGTGCTAGCGTTCCC" = "#604e97",
+                                "CGGTCGTATCCTTGGAGGTA" = "#654522",
+                                "TGAACGGTCCTTAGGTGGCT" = "#8db600",
+                                "TGTTCGTTCGGATGCTAGGT" = "#a1caf1",
+                                "GCCAGCATGCATTGGTGCCA" = "#be0032",
+                                "TGTAGGGAACATAGTATGAT" = "#c2b280",
+                                "GGGTACGACGAACCGTACGA" = "#008856",
+                                "GGATCGCAGCTAGGTAGGCT" = "#e68fac",
+                                "GCTATGTTGCAAGCATTGAT" = "#0067a5",
+                                "ACTATCATTGCAAGCTTCGA" = "#2b3d26",
+                                "CGAAGGGAGCTAGCTTACGT" = "grey50",
+                                "TCGAGGTTAGATTCTATCTT" = "#f6a600",
+                                "GGGTTCAAACTATCCATGAT" = "#b3446c",
+                                "GGGAAGGTGGGTGGGAGCGT" = "#dcd300",
+                                "GGTTGGTAAGTTTGTTAGGA" = "#882d17"
+                                )) + 
+  labs(x = "UMAP 1", y = "UMAP 2") +
+  scale_x_continuous(limits = x_limits) +
+  scale_y_continuous(limits = y_limits) +
+  theme_void() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", angle = 90),
+    legend.position = "none"
+  ) +
+  coord_fixed(ratio = 1)
+
+p
+
+p <- egg::set_panel_size(p, width = panel_size, height = panel_size)
+
+
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Cell_Cycle_UMAPs/Targeted_Barcodes_No_Enrichment_Library.pdf", width = 4, height = 4, device = cairo_pdf)
+
+
+```

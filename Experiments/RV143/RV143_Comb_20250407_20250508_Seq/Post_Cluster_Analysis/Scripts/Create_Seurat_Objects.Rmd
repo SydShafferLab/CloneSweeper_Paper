@@ -1,0 +1,546 @@
+---
+title: "Create_Seurat_Objects"
+output: html_document
+date: "2025-05-23"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+
+library(stringr)
+
+library(pheatmap)
+
+getwd()
+
+set.seed(1)
+
+```
+
+#Set parameters:
+```{r, include=FALSE}
+
+lineage_barcode_umi_threshold <- 3
+
+```
+
+#Create custom functions:
+```{r, include=FALSE}
+
+#Create function that prints non-zero lineage barcodes in a cell:
+print_non_zero_barcodes <- function(cell_name, data, diff_value) {
+  if (is.na(cell_name)) {
+    return()
+  }
+  
+  cell_data <- data[, cell_name]
+  non_zero <- cell_data[cell_data > 0]
+  non_zero_sorted <- sort(non_zero, decreasing = TRUE)
+  
+  cat("  Cell:", cell_name, "\n")
+  cat("  Barcodes:", paste(names(non_zero_sorted), "=", non_zero_sorted, collapse=", "), "\n\n")
+}
+
+```
+
+#Load data from counts:
+```{r, include=FALSE}
+
+counts_untransduced <- Read10X("RV143_Comb_20250407_20250508_Seq/20250518_RV143_Enrichment_counts_untransduced/outs/raw_feature_bc_matrix")
+
+counts_enriched <- Read10X("RV143_Comb_20250407_20250508_Seq/20250518_RV143_Enrichment_counts_enriched/outs/raw_feature_bc_matrix")
+
+```
+
+
+#Create Seurat objects:
+```{r, include=FALSE}
+
+seurat_object_untransduced <- CreateSeuratObject(counts = counts_untransduced, project = "Untransduced", min.cells = 3, min.features = 200)
+
+seurat_object_enriched <- CreateSeuratObject(counts = counts_enriched, project = "Enriched", min.cells = 3, min.features = 200)
+
+```
+
+#Remove initial matrices to save space:
+```{r, include=FALSE}
+
+rm(counts_untransduced,counts_enriched)
+
+```
+
+
+#Plot features for filtering:
+```{r}
+
+seurat_object_untransduced[["percent.mt"]] <- PercentageFeatureSet(seurat_object_untransduced, pattern = "^MT-")
+VlnPlot(seurat_object_untransduced, layer = "counts", features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+seurat_object_enriched[["percent.mt"]] <- PercentageFeatureSet(seurat_object_enriched, pattern = "^MT-")
+VlnPlot(seurat_object_enriched, layer = "counts", features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+```
+
+Filter cells in Seurat objects and remove original matrices:
+```{r, include=FALSE}
+
+seurat_object_untransduced_standard_filter <- subset(seurat_object_untransduced, subset = nFeature_RNA > 200 & nFeature_RNA < 9000 & nCount_RNA > 10000 & percent.mt < 10)
+
+rm(seurat_object_untransduced)
+
+seurat_object_enriched_standard_filter <- subset(seurat_object_enriched, subset = nFeature_RNA > 200 & nFeature_RNA < 9000 & nCount_RNA > 10000 & percent.mt < 10)
+
+rm(seurat_object_enriched)
+
+```
+
+
+#Load barcode count dataframe:
+```{r, include=FALSE}
+
+barcode_data <- read.table("RV143_Comb_20250407_20250508_Seq/20250520_Unmapped/EB_output_modified.txt")
+
+colnames(barcode_data) <- c("Cell_Barcode","UMI","Lineage_Barcode","StartSeq_Type","Sample")
+
+```
+
+#Get counts of each UMI per cell barcode, lineage barcode combination, this will be added to the seurat object as an assay:
+```{r, include=FALSE}
+
+#Do this for untransduced cells:
+
+#Subset untransduced cells:
+barcode_data_untransduced <- barcode_data[barcode_data$Sample == "untransduced_step1_unmapped.txt",]
+
+#Do this for 
+lineage_counts_untransduced <- barcode_data_untransduced %>%
+  # Group by Cell_Barcode and Lineage_Barcode
+  group_by(Lineage_Barcode, Cell_Barcode) %>%
+  # Count unique UMIs
+  summarize(count = n_distinct(UMI)) %>%
+  # Ungroup
+  ungroup() %>%
+  # Pivot wider to create matrix-like format needed for Seurat
+  pivot_wider(
+    names_from = Cell_Barcode,
+    values_from = count,
+    values_fill = 0
+  ) %>%
+  # Convert Cell_Barcode to row names
+  column_to_rownames("Lineage_Barcode")
+
+
+
+#Subset enriched cells:
+barcode_data_enriched <- barcode_data[barcode_data$Sample == "enriched_step1_unmapped.txt",]
+
+#Do this for 
+lineage_counts_enriched <- barcode_data_enriched %>%
+  # Group by Cell_Barcode and Lineage_Barcode
+  group_by(Lineage_Barcode, Cell_Barcode) %>%
+  # Count unique UMIs
+  summarize(count = n_distinct(UMI)) %>%
+  # Ungroup
+  ungroup() %>%
+  # Pivot wider to create matrix-like format needed for Seurat
+  pivot_wider(
+    names_from = Cell_Barcode,
+    values_from = count,
+    values_fill = 0
+  ) %>%
+  # Convert Cell_Barcode to row names
+  column_to_rownames("Lineage_Barcode")
+
+#Remove original barcode data to save memory:
+rm(barcode_data)
+
+```
+
+#Add a row of zeros for cell barcodes without any lineage barcodes, necessary to add it to the Seurat object:
+```{r, include=FALSE}
+
+#Do this for untransduced:
+
+# Add any missing cell barcodes as columns with zeros
+missing_cols <- setdiff(colnames(seurat_object_untransduced_standard_filter), colnames(lineage_counts_untransduced))
+if(length(missing_cols) > 0) {
+  zero_matrix <- matrix(0, 
+                       nrow = nrow(lineage_counts_untransduced), 
+                       ncol = length(missing_cols),
+                       dimnames = list(rownames(lineage_counts_untransduced), missing_cols))
+  barcode_data_untransduced_complete <- cbind(lineage_counts_untransduced, zero_matrix)
+}
+
+# Sort columns to match Seurat object order
+barcode_data_untransduced_complete <- barcode_data_untransduced_complete[, colnames(seurat_object_untransduced_standard_filter)]
+
+#Do this for enriched:
+
+# Add any missing cell barcodes as columns with zeros
+missing_cols <- setdiff(colnames(seurat_object_enriched_standard_filter), colnames(lineage_counts_enriched))
+if(length(missing_cols) > 0) {
+  zero_matrix <- matrix(0, 
+                       nrow = nrow(lineage_counts_enriched), 
+                       ncol = length(missing_cols),
+                       dimnames = list(rownames(lineage_counts_enriched), missing_cols))
+  barcode_data_enriched_complete <- cbind(lineage_counts_enriched, zero_matrix)
+}
+
+# Sort columns to match Seurat object order
+barcode_data_enriched_complete <- barcode_data_enriched_complete[, colnames(seurat_object_enriched_standard_filter)]
+
+```
+
+#Add lineage barcode assay (counts) to the Seurat objects:
+```{r, include=FALSE}
+
+# Add lineage dataframe as an assay:
+
+seurat_object_untransduced_standard_filter[["Lineage_Assay"]] <- CreateAssayObject(counts = barcode_data_untransduced_complete)
+
+rm(barcode_data_untransduced_complete)
+
+
+seurat_object_enriched_standard_filter[["Lineage_Assay"]] <- CreateAssayObject(counts = barcode_data_enriched_complete)
+
+rm(barcode_data_enriched_complete, barcode_data_enriched, barcode_data_untransduced, lineage_counts_enriched, lineage_counts_untransduced, zero_matrix, missing_cols)
+
+```
+
+
+#Combine Seurat objects:
+```{r, include=FALSE}
+
+seurat_object_merged <- merge(seurat_object_untransduced_standard_filter, y = seurat_object_enriched_standard_filter, add.cell.ids = c("Untransduced", "Enriched"), project = "RV143")
+
+```
+
+#Remove original seurat objects for space:
+```{r, include=FALSE}
+
+rm(seurat_object_untransduced_standard_filter,seurat_object_enriched_standard_filter)
+
+```
+
+#Get metrics for barcode data before continuing with normalization:
+```{r}
+
+#Get number of unique lineage barcodes:
+number_of_unique_lineage_barcodes_per_cell <- colSums(seurat_object_merged[["Lineage_Assay"]]@counts > 0)
+histogram_number_of_unique_lineage_barcodes_per_cell <- table(number_of_unique_lineage_barcodes_per_cell)
+plot(histogram_number_of_unique_lineage_barcodes_per_cell, xlab = "Unique Non-Zero Lineage Barcodes", ylab = "Number of Cells")
+
+histogram_number_of_unique_lineage_barcodes_per_cell_percentage <- histogram_number_of_unique_lineage_barcodes_per_cell*100/sum(histogram_number_of_unique_lineage_barcodes_per_cell)
+plot(histogram_number_of_unique_lineage_barcodes_per_cell_percentage, xlab = "Unique Non-Zero Lineage Barcodes", ylab = "% of Cells")
+
+non_zero_lineage_barcodes <- rownames(seurat_object_merged[["Lineage_Assay"]]@counts)[rowSums(seurat_object_merged[["Lineage_Assay"]]@counts > 0) > 0]
+
+#Make histogram of number of total umis for lineage barcodes:
+plot(table(colSums(seurat_object_merged[["Lineage_Assay"]]@counts)), xlab = "Total Lineage Barcode UMIs", ylab = "Number of Cells")
+
+#Make histogram of number of max umis for lineage barcodes:
+plot(table(apply(seurat_object_merged[["Lineage_Assay"]]@counts, 2, max)), xlab = "Max Lineage Barcode UMIs", ylab = "Number of Cells")
+
+#Get number of unique lineage barcodes for untransduced:
+cells_untransduced <- colnames(seurat_object_merged)[seurat_object_merged$orig.ident == "Untransduced"]
+table(colSums(seurat_object_merged[["Lineage_Assay"]]@counts[, cells_untransduced] > 0))
+
+#Get number of unique lineage barcodes for enriched:
+cells_enriched <- colnames(seurat_object_merged)[seurat_object_merged$orig.ident == "Enriched"]
+table(colSums(seurat_object_merged[["Lineage_Assay"]]@counts[, cells_enriched] > 0))
+
+print(paste("% of cells with lineage barcode with >= 1 umis:", (1-(table(colSums(seurat_object_merged[["Lineage_Assay"]]@counts))[1]/sum(table(colSums(seurat_object_merged[["Lineage_Assay"]]@counts)))))*100))
+
+rm(number_of_unique_lineage_barcodes_per_cell, histogram_number_of_unique_lineage_barcodes_per_cell_percentage, non_zero_lineage_barcodes, cells_untransduced, cells_enriched, histogram_number_of_unique_lineage_barcodes_per_cell)
+
+```
+
+#Remove any cells with >= lineage_barcode_umi_threshold umis of multiple unique barcodes:
+```{r, include=FALSE}
+
+#print number of cells to check:
+print(ncol(seurat_object_merged))
+
+#17,172 cells
+
+lineage_barcode_data <- GetAssayData(seurat_object_merged, assay = "Lineage_Assay", layer = "counts")
+
+#Count number of lineage barcodes passing threshold:
+lineage_barcodes_above_threshold <- colSums(lineage_barcode_data >= lineage_barcode_umi_threshold)
+
+cells_without_too_many_lineage_barcodes <- names(lineage_barcodes_above_threshold)[lineage_barcodes_above_threshold < 2]
+
+seurat_remove_cells_with_multiple_lineage_barcodes <- subset(seurat_object_merged, cells = cells_without_too_many_lineage_barcodes)
+
+rm(seurat_object_merged, lineage_barcode_data, lineage_barcodes_above_threshold, cells_without_too_many_lineage_barcodes)
+
+#Print current number of cells to check:
+print(ncol(seurat_remove_cells_with_multiple_lineage_barcodes))
+
+#15,975 cells
+
+```
+
+#Remove any cells with less than lineage_barcode_umi_threshold:
+```{r, include=FALSE}
+
+#15,975 cells
+
+lineage_barcode_data <- GetAssayData(seurat_remove_cells_with_multiple_lineage_barcodes, assay = "Lineage_Assay", layer = "counts")
+
+cells_with_threshold_or_more_umis_lineage_barcodes <- colnames(lineage_barcode_data)[Matrix::colSums(lineage_barcode_data >= lineage_barcode_umi_threshold) >= 1]
+
+seurat_with_threshold_or_more_umis_lineage_barcodes <- subset(seurat_remove_cells_with_multiple_lineage_barcodes, cells = cells_with_threshold_or_more_umis_lineage_barcodes)
+
+rm(seurat_remove_cells_with_multiple_lineage_barcodes, lineage_barcode_data, cells_with_threshold_or_more_umis_lineage_barcodes)
+
+#Print current number of cells to check:
+print(ncol(seurat_with_threshold_or_more_umis_lineage_barcodes))
+
+#13,544 cells
+
+```
+
+
+#Remove any cells with similar number of umis of lineage barcodes (ie if 2 umis in one barcode but 3 in the other remove):
+```{r, include=FALSE}
+
+#13,544 cells
+
+lineage_barcode_data <- GetAssayData(seurat_with_threshold_or_more_umis_lineage_barcodes, assay = "Lineage_Assay", layer = "counts")
+
+max_second_max_diff_umi_barcodes <- apply(lineage_barcode_data, 2, function(cell) {
+  sorted_umis <- sort(cell, decreasing = TRUE)
+  if (length(sorted_umis) >= 2) {
+    return(sorted_umis[1] - sorted_umis[2])
+  } else if (length(sorted_umis) == 1) {
+    return(sorted_umis[1])  # Only one barcode present
+  } else {
+    return(0)  # No barcodes present
+  }
+})
+
+#Get examples of cells with different differences--------------------------------------------------------------------------
+
+# Find multiple example cells for each difference value
+num_examples <- 5  # Change this to show more or fewer examples
+
+cells_with_diff_0 <- names(max_second_max_diff_umi_barcodes)[max_second_max_diff_umi_barcodes == 0][1:num_examples]
+cells_with_diff_1 <- names(max_second_max_diff_umi_barcodes)[max_second_max_diff_umi_barcodes == 1][1:num_examples]
+cells_with_diff_2 <- names(max_second_max_diff_umi_barcodes)[max_second_max_diff_umi_barcodes == 2][1:num_examples]
+cells_with_diff_3 <- names(max_second_max_diff_umi_barcodes)[max_second_max_diff_umi_barcodes == 3][1:num_examples]
+
+# Print examples for each category
+cat("========================================\n")
+cat("=== Cells with UMI difference = 0 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_0) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 0)
+}
+
+cat("========================================\n")
+cat("=== Cells with UMI difference = 1 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_1) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 1)
+}
+
+cat("========================================\n")
+cat("=== Cells with UMI difference = 2 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_2) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 2)
+}
+
+
+cat("========================================\n")
+cat("=== Cells with UMI difference = 3 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_3) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 3)
+}
+
+# Look at cells with highest umis by sorting cells by highest max UMI within each difference category
+max_umis <- apply(lineage_barcode_data, 2, function(cell) max(cell))
+
+cells_with_diff_0 <- names(sort(max_umis[cells_with_diff_0[!is.na(cells_with_diff_0)]], decreasing = TRUE))
+cells_with_diff_1 <- names(sort(max_umis[cells_with_diff_1[!is.na(cells_with_diff_1)]], decreasing = TRUE))
+cells_with_diff_2 <- names(sort(max_umis[cells_with_diff_2[!is.na(cells_with_diff_2)]], decreasing = TRUE))
+cells_with_diff_3 <- names(sort(max_umis[cells_with_diff_3[!is.na(cells_with_diff_3)]], decreasing = TRUE))
+
+# Print examples for each category
+cat("========================================\n")
+cat("=== Cells with UMI difference = 0 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_0) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 0)
+}
+cat("========================================\n")
+cat("=== Cells with UMI difference = 1 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_1) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 1)
+}
+cat("========================================\n")
+cat("=== Cells with UMI difference = 2 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_2) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 2)
+}
+cat("========================================\n")
+cat("=== Cells with UMI difference = 3 ===\n")
+cat("========================================\n")
+for (cell in cells_with_diff_3) {
+  print_non_zero_barcodes(cell, lineage_barcode_data, 3)
+}
+
+print_non_zero_barcodes("Untransduced_AAACCCGCATCCGCAT-1", lineage_barcode_data)
+
+#-------------------------------------------------------------------------------------
+
+#Remove cells within a distance of lineage_barcode_umi_threshold-1 between top lineage barcode umis:
+
+#Get cells with greater than lineage_barcode_umi_threshold-1 lineage barcode umis (aka lineage_barcode_umi_threshold or greater distance):
+cells_with_high_difference_between_barcodes <- names(max_second_max_diff_umi_barcodes)[max_second_max_diff_umi_barcodes >= lineage_barcode_umi_threshold]
+
+seurat_strict_barcode_requirements <- subset(seurat_with_threshold_or_more_umis_lineage_barcodes, cells = cells_with_high_difference_between_barcodes)
+
+rm(seurat_with_threshold_or_more_umis_lineage_barcodes, max_second_max_diff_umi_barcodes, num_examples, cells_with_diff_0, cells_with_diff_1, cells_with_diff_2, cells_with_diff_3, max_umis, lineage_barcode_data, cell, cells_with_high_difference_between_barcodes)
+
+#Print current number of cells to check:
+print(ncol(seurat_strict_barcode_requirements))
+
+#12,996 cells
+
+```
+
+#Assign lineage barcode with the most umis to each cell:
+```{r, include=FALSE}
+
+lineage_barcode_data <- GetAssayData(seurat_strict_barcode_requirements, assay = "Lineage_Assay", layer = "counts")
+
+seurat_strict_barcode_requirements$Lineage_Barcode_w_Max_Count <- apply(lineage_barcode_data, 2, function(x) {
+  rownames(lineage_barcode_data)[which.max(x)]
+})
+
+rm(lineage_barcode_data)
+
+```
+
+#Load enrichment mini-library for assignment of lineage barcodes:
+```{r, include=FALSE}
+
+#Get gibson sequences:
+gibson_assembly_sequences <- read.table("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/Gibson_Assembly_Sequences_20241212.csv")
+
+#Isolate just the barcodes:
+mini_library_barcodes <- apply(gibson_assembly_sequences, 1, function(x) {
+  substring(x, first = 50, last = 69)
+})
+
+```
+
+#Assign enrichment mini-library positive or not to cells in the seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements$has_targeted_lineage_barcode <- ifelse((seurat_strict_barcode_requirements$Lineage_Barcode_w_Max_Count %in% mini_library_barcodes),
+                              "Targeted_Lineage_Barcode",                                           
+                              "Not_Targeted_Lineage_Barcode")
+
+#Create a separate metadata column for just enrichment mini-library assigned barcodes:
+seurat_strict_barcode_requirements$Mini_Library_Assignment <-
+  ifelse(seurat_strict_barcode_requirements$has_targeted_lineage_barcode == "Targeted_Lineage_Barcode",
+         seurat_strict_barcode_requirements$Lineage_Barcode_w_Max_Count,
+         "Non-Enriched")
+
+```
+
+
+#Normalize data with strict barcoding requirements:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- JoinLayers(seurat_strict_barcode_requirements)
+
+seurat_strict_barcode_requirements <- NormalizeData(seurat_strict_barcode_requirements,
+              normalization.method = "LogNormalize",
+              scale.factor = 10000)
+
+seurat_strict_barcode_requirements <- ScaleData(seurat_strict_barcode_requirements)
+
+seurat_strict_barcode_requirements <- FindVariableFeatures(seurat_strict_barcode_requirements)
+
+```
+
+#Run dimension reductions:
+```{r}
+
+seurat_strict_barcode_requirements <- RunPCA(seurat_strict_barcode_requirements, features = VariableFeatures(object = seurat_strict_barcode_requirements))
+
+seurat_strict_barcode_requirements <- FindNeighbors(seurat_strict_barcode_requirements, dims = 1:10)
+seurat_strict_barcode_requirements <- FindClusters(seurat_strict_barcode_requirements, resolution = 0.5)
+
+seurat_strict_barcode_requirements <- RunUMAP(seurat_strict_barcode_requirements, dims = 1:10)
+
+DimPlot(seurat_strict_barcode_requirements, reduction = "umap")
+
+DimPlot(seurat_strict_barcode_requirements, reduction = "umap", group.by = "Mini_Library_Assignment", ) + NoLegend()
+
+```
+
+#Save strict barcode requirement seurat object:
+```{r, include=FALSE}
+
+getwd()
+
+saveRDS(seurat_strict_barcode_requirements,"RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+
+#Save raw reads for cNMF:
+```{r, include=FALSE}
+
+getwd()
+
+seurat_object_strict_barcode_requirements_raw_count <- seurat_strict_barcode_requirements[["RNA"]]$counts
+
+writeMM(seurat_object_strict_barcode_requirements_raw_count,"RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_object_strict_barcode_requirements_raw_count/matrix.mtx")
+
+# Output cell barcodes
+barcodes <- colnames(seurat_object_strict_barcode_requirements_raw_count)
+write.table(as.data.frame(barcodes), "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_object_strict_barcode_requirements_raw_count/barcodes.tsv",
+            col.names = FALSE, row.names = FALSE, sep = "\t")
+
+
+# Output feature names
+gene_names <- rownames(seurat_object_strict_barcode_requirements_raw_count)
+features <- data.frame("gene_id" = gene_names,"gene_name" = gene_names,type = "Gene Expression")
+write.table(as.data.frame(features), sep = "\t", "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_object_strict_barcode_requirements_raw_count/features.tsv",
+            col.names = FALSE, row.names = FALSE)
+
+#Gzip files for cNMF:
+system("gzip -f RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_object_strict_barcode_requirements_raw_count/matrix.mtx")
+system("gzip -f RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_object_strict_barcode_requirements_raw_count/barcodes.tsv")
+system("gzip -f RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_object_strict_barcode_requirements_raw_count/features.tsv")
+
+```
+
+
+
+

@@ -1,0 +1,546 @@
+---
+title: "Plot_Percentage_of_Cells"
+output: html_document
+date: "2025-07-01"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+library(dplyr)
+library(stringr)
+library(reshape2)
+library(ggforce)
+library(ggbreak)
+
+set.seed(1)
+
+```
+
+#Define functions:
+
+```{r, include=FALSE}
+
+#For reverse complementing:
+revcomp <- function(seq) {
+  chartr("ATCG", "TAGC", paste(rev(strsplit(seq, "")[[1]]), collapse=""))
+}
+
+```
+
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Get percentages of cells in each orig.ident (untransduce and transduced/enriched) with a specific targeted barcode:
+```{r, include=FALSE}
+
+untransduced_table <- prop.table(table(seurat_strict_barcode_requirements@meta.data[seurat_strict_barcode_requirements@meta.data$orig.ident == "Untransduced", "Mini_Library_Assignment"], useNA = "always"))*100
+
+transduced_table <- prop.table(table(seurat_strict_barcode_requirements@meta.data[seurat_strict_barcode_requirements@meta.data$orig.ident == "Enriched", "Mini_Library_Assignment"], useNA = "always"))*100
+
+#Remove NA columns:
+untransduced_table <- untransduced_table[!is.na(names(untransduced_table))]
+transduced_table <- transduced_table[!is.na(names(transduced_table))]
+
+
+```
+
+#Load ALL targeted barcodes:
+```{r, include=FALSE}
+
+#Get gibson sequences:
+gibson_assembly_sequences <- read.table("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/Gibson_Assembly_Sequences_20241212.csv")
+
+#Isolate just the barcodes:
+mini_library_barcodes <- apply(gibson_assembly_sequences, 1, function(x) {
+  substring(x, first = 50, last = 69)
+})
+
+```
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+rownames(gDNA_counts) <- lapply(rownames(gDNA_counts),revcomp)
+
+```
+
+#Get proportion of gDNA reads:
+```{r, include=FALSE}
+
+gDNA_targeted_percentages <- gDNA_counts$Pre2[rownames(gDNA_counts) %in% mini_library_barcodes] * 100 / sum(gDNA_counts$Pre2)
+
+names(gDNA_targeted_percentages) <- rownames(gDNA_counts)[rownames(gDNA_counts) %in% mini_library_barcodes]
+
+```
+
+#Combine percentages into a single dataframe:
+```{r, include=FALSE}
+
+#Create vectors with 0s for missing lineage barcodes:
+untransduced_vector <- rep(0, length(mini_library_barcodes))
+names(untransduced_vector) <- mini_library_barcodes
+untransduced_vector[names(untransduced_table)] <- unlist(untransduced_table)
+#Remove non-enriched:
+untransduced_vector <- untransduced_vector[names(untransduced_vector) != "Non-Enriched"]
+
+transduced_vector <- rep(0, length(mini_library_barcodes))
+names(transduced_vector) <- mini_library_barcodes
+transduced_vector[names(transduced_table)] <- unlist(transduced_table)
+#Remove non-enriched:
+transduced_vector <- transduced_vector[names(transduced_vector) != "Non-Enriched"]
+
+#Create gDNA vector:
+gDNA_vector <- rep(0, length(mini_library_barcodes))
+names(gDNA_vector) <- mini_library_barcodes
+gDNA_vector[names(gDNA_targeted_percentages)] <- unlist(gDNA_targeted_percentages)
+
+all_percentages_dataframe <- data.frame(Untransduced = untransduced_vector,
+                                        Transduced = transduced_vector,
+                                        gDNA = gDNA_vector,
+                                        row.names = mini_library_barcodes)
+
+```
+
+
+#Plot the percentages
+```{r}
+
+ggplot(all_percentages_dataframe, aes(x = Untransduced, y = Transduced, color = gDNA)) +
+  geom_point(size = 2) +
+  labs(x = "% of Cells in Untransduced", 
+       y = "% of Cells in Transduced",
+       color = "% of\nPre-Treatment\ngDNA Reads") +
+  scale_color_gradient(low = "gray", high = "black") +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black")
+  )
+
+```
+
+#Plot with gDNA on the x-axis, so that all points are visible:
+```{r}
+
+ggplot(all_percentages_dataframe, aes(x = gDNA, y = Transduced, color = Untransduced)) +
+  geom_point(size = 0.5) +
+  labs(x = "% of Pre-Treatment gDNA Reads",
+       y = "% of Cells in Transduced",
+       color = "% of Cells\nin Untransduced") +
+  scale_color_gradient(low = "gray", high = "black") +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5),
+    aspect.ratio = 1
+  )
+
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Percentage_of_Cells/Untransduced_as_Color.pdf", plot = last_plot(), device = cairo_pdf, width = 3, height = 3)
+
+```
+
+#Determine the GC % for each barcode:
+```{r, include=FALSE}
+
+all_percentages_dataframe$GC_Content_Percent <- str_count(row.names(all_percentages_dataframe), "[GCgc]")*100/nchar(row.names(all_percentages_dataframe))
+
+lm(formula = all_percentages_dataframe$Transduced ~ all_percentages_dataframe$gDNA + all_percentages_dataframe$GC_Content_Percent + all_percentages_dataframe$gDNA*all_percentages_dataframe$GC_Content_Percent)
+
+```
+
+
+```{r}
+ggplot(all_percentages_dataframe,aes(x=GC_Content_Percent,y=Transduced))+geom_point()
+
+ggplot(all_percentages_dataframe,aes(x=GC_Content_Percent,y=Transduced/gDNA))+geom_jitter()
+
+```
+
+#Plot box plot for % of cells/reads
+```{r}
+
+#Add lineage barcode as column for melting:
+all_percentages_dataframe_w_bc <- all_percentages_dataframe[1:length(all_percentages_dataframe)-1]
+all_percentages_dataframe_w_bc$Lineage_Barcode <- row.names(all_percentages_dataframe)
+
+#Melt dataframe:
+all_percentages_dataframe_melted <- melt(all_percentages_dataframe_w_bc)
+colnames(all_percentages_dataframe_melted) <- c("Lineage_Barcode", "Source", "Percent")
+
+ggplot(all_percentages_dataframe_melted, aes(x = Source, y = Percent)) +
+  geom_boxplot(outlier.shape = NA) +
+  geom_line(aes(group = Lineage_Barcode), alpha = 0.5, color = "gray60") +
+  geom_point() +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1),
+    aspect.ratio = 1
+  ) +
+  xlab("") +
+  ylab("% of Reads/Cells") +
+  scale_x_discrete(limits = c("gDNA","Untransduced","Transduced"))
+
+
+```
+#Plot as gropuped bar plot plot, scaled:
+```{r}
+
+
+gDNA_transduced_only_percentages <- all_percentages_dataframe_melted[all_percentages_dataframe_melted$Source != "Untransduced",]
+
+#Set factor to make untransduced visible along transduced:
+scale_factor <- 60
+
+ggplot(data = gDNA_transduced_only_percentages, 
+       aes(x = Lineage_Barcode, y = ifelse(Source == "Transduced", Percent / scale_factor, Percent), fill = forcats::fct_rev(Source))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(
+    name = "gDNA\n(% of Reads)",
+    sec.axis = sec_axis(~ . * scale_factor, name = "Post-Enrichment Protocol\n(% of Cells)", breaks = seq(0,0.025*scale_factor, by = 0.005*scale_factor)),
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  scale_fill_manual(values = c("grey70", "black"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)")) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_blank(),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  xlab("Lineage Barcodes") +
+  labs(fill = "Source") +
+  coord_cartesian(ylim = c(0,0.025))
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Percentage_of_Cells/Barplot_Scaled.pdf", plot = last_plot(), device = cairo_pdf, width = 5.5, height = 1.5)
+
+```
+#Plot as gropuped bar plot plot, unscaled, focusing on gDNA, letting enriched go off scale:
+```{r}
+
+
+#Set factor to make untransduced visible along transduced:
+scale_factor <- 1
+
+ggplot(data = gDNA_transduced_only_percentages, 
+       aes(x = Lineage_Barcode, y = ifelse(Source == "Transduced", Percent / scale_factor, Percent), fill = forcats::fct_rev(Source))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(
+    name = "gDNA\n(% of Reads)",
+    sec.axis = sec_axis(~ . * scale_factor, name = "Post-Enrichment Protocol\n(% of Cells)", breaks = seq(0,0.025*scale_factor, by = 0.005*scale_factor)),
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  scale_fill_manual(values = c("grey70", "black"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)")) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_blank(),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  xlab("Lineage Barcodes") +
+  labs(fill = "Source") +
+  coord_cartesian(ylim = c(0,0.025))
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Percentage_of_Cells/Barplot_Unscaled_gDNA.pdf", plot = last_plot(), device = cairo_pdf, width = 5.5, height = 1.5)
+
+
+```
+
+
+#Plot as gropuped bar plot plot, unscaled, focusing on enriched protocol:
+```{r}
+
+
+#Set factor to make untransduced visible along transduced:
+scale_factor <- 1
+
+ggplot(data = gDNA_transduced_only_percentages, 
+       aes(x = Lineage_Barcode, y = ifelse(Source == "Transduced", Percent / scale_factor, Percent), fill = forcats::fct_rev(Source))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_y_continuous(
+    name = "gDNA\n(% of Reads)",
+    sec.axis = sec_axis(~ . * scale_factor, name = "Post-Enrichment Protocol\n(% of Cells)", breaks = seq(0,1.2*scale_factor, by = 0.4*scale_factor)),
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  scale_fill_manual(values = c("grey70", "black"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)")) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_blank(),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  xlab("Lineage Barcodes") +
+  labs(fill = "Source") +
+  coord_cartesian(ylim = c(0,1.5))
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Percentage_of_Cells/Barplot_Unscaled_Enriched.pdf", plot = last_plot(), device = cairo_pdf, width = 5.5, height = 1.5)
+
+
+```
+#Plot using a broken axis:
+
+```{r}
+
+ggplot(data = gDNA_transduced_only_percentages, 
+       aes(x = Lineage_Barcode, y = ifelse(Source == "Transduced", Percent / scale_factor, Percent), fill = forcats::fct_rev(Source))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("grey70", "black"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)")) +
+  xlab("Lineage Barcodes") +
+  ylab("gDNA\n(% of Reads),\nEnrichment Library+\n(% of Cells)") +
+  labs(fill = "Source") +
+  # Add broken axis:
+  scale_y_break(c(0.03, 0.04), scales = 1) +
+  scale_y_break(c(0.2, 1.2), scales = 1) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_blank(),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y.right = element_blank(),
+    axis.title.y.right = element_blank()
+  )
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Percentage_of_Cells/Barplot_Unscaled_Enriched_Broken_Axis.pdf", plot = last_plot(), device = cairo_pdf, width = 5.5, height = 2.2)
+
+#Plot without legend for ease of transfer:
+
+ggplot(data = gDNA_transduced_only_percentages, 
+       aes(x = Lineage_Barcode, y = ifelse(Source == "Transduced", Percent / scale_factor, Percent), fill = forcats::fct_rev(Source))) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(values = c("grey70", "black"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)")) +
+  xlab("Lineage Barcodes") +
+  ylab("gDNA\n(% of Reads),\nEnrichment Library+\n(% of Cells)") +
+  labs(fill = "Source") +
+  # Add broken axis:
+  scale_y_break(c(0.03, 0.04), scales = 1) +
+  scale_y_break(c(0.2, 1.2), scales = 1) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_blank(),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y.right = element_blank(),
+    axis.title.y.right = element_blank(),
+    legend.position = "none"
+  )
+
+
+ggsave("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Plot_Percentage_of_Cells/Barplot_Unscaled_Enriched_Broken_Axis_NoLegend.pdf", plot = last_plot(), device = cairo_pdf, width = 3, height = 2.2)
+
+
+```
+
+#Add data to allow plotting non-zero cases in untransduced (since only 1 cell in 2 different lineages is present):
+```{r, include=FALSE}
+
+#Get barcodes that are nonzero in untransduced:
+barcode_status <- all_percentages_dataframe_melted %>%
+  filter(Source == "Untransduced") %>%
+  mutate(Status = ifelse(Percent > 0, "nonzero", "zero")) %>%
+  select(Lineage_Barcode, Status)
+
+#Add untransduced to the dataframe:
+untransduced_separate <- gDNA_transduced_only_percentages %>%
+  left_join(barcode_status, by = "Lineage_Barcode") %>%
+  mutate(Source = case_when(
+    Source == "Transduced" & Status == "zero" ~ "Transduced_Untransduced_zero",
+    Source == "Transduced" & Status == "nonzero" ~ "Transduced_Untransduced_nonzero",
+    Source == "gDNA" & Status == "zero" ~ "gDNA_Untransduced_zero",
+    Source == "gDNA" & Status == "nonzero" ~ "gDNA_Untransduced_nonzero",
+    TRUE ~ Source
+  )) %>%
+  select(-Status)
+
+
+
+```
+
+#Create plot with untransduced:
+```{r}
+
+
+ggplot(data = untransduced_separate, 
+       aes(x = Lineage_Barcode, y = Percent, fill = Source)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(breaks = c("gDNA_Untransduced_zero",
+                               "Transduced_Untransduced_zero"),
+                    values = c("gDNA_Untransduced_zero" = "grey70",
+                               "Transduced_Untransduced_zero" = "black",
+                               "gDNA_Untransduced_nonzero" = "pink",
+                               "Transduced_Untransduced_nonzero" = "red"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)",
+                               NULL,
+                               NULL)) +
+  xlab("Lineage Barcodes") +
+  ylab("gDNA\n(% of Reads),\nEnrichment Library+\n(% of Cells)") +
+  labs(fill = "Source") +
+  # Add broken axis:
+  scale_y_break(c(0.03, 0.04), scales = 1) +
+  scale_y_break(c(0.2, 1.2), scales = 1) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_blank(),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y.right = element_blank(),
+    axis.title.y.right = element_blank()
+  )
+
+```
+#Create plot with untransduced, plot with x labels to see order of barcodes:
+```{r}
+
+
+ggplot(data = untransduced_separate, 
+       aes(x = Lineage_Barcode, y = Percent, fill = Source)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  scale_fill_manual(breaks = c("gDNA_Untransduced_zero",
+                               "Transduced_Untransduced_zero"),
+                    values = c("gDNA_Untransduced_zero" = "grey70",
+                               "Transduced_Untransduced_zero" = "black",
+                               "gDNA_Untransduced_nonzero" = "pink",
+                               "Transduced_Untransduced_nonzero" = "red"),
+                    labels = c("gDNA (% of Reads)",
+                               "Post-Enrichment Protocol (% of Cells)",
+                               NULL,
+                               NULL)) +
+  xlab("Lineage Barcodes") +
+  ylab("gDNA\n(% of Reads),\nEnrichment Library+\n(% of Cells)") +
+  labs(fill = "Source") +
+  # Add broken axis:
+  scale_y_break(c(0.03, 0.04), scales = 1) +
+  scale_y_break(c(0.2, 1.2), scales = 1) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(angle = 90),
+    legend.key.size = unit(0.4, "cm"),
+    legend.spacing.y = unit(0.1, "cm"),
+    legend.title = element_text(margin = margin(b=0.1, unit = "cm")),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.text.y.right = element_blank(),
+    axis.title.y.right = element_blank()
+  )
+
+```

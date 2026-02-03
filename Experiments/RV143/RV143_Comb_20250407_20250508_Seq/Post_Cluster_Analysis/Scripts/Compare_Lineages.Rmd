@@ -1,0 +1,196 @@
+---
+title: "Compare_Lineages"
+output: html_document
+date: "2025-11-04"
+---
+
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(ggplot2)
+library(ggrastr)
+
+
+
+getwd()
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+panel_dimensions <- c(1.5,1)
+
+```
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Run FindMarkers comparing largest lineages:
+```{r, include=FALSE}
+
+#Set Idents to mini-library assignment:
+Idents(seurat_strict_barcode_requirements) <- "Mini_Library_Assignment"
+
+#Ignoring Non-Enriched get the top 3 lineages:
+
+#Get sorted table:
+mini_assignment_table <- sort(table(Idents(seurat_strict_barcode_requirements)), decreasing = TRUE)
+
+#Remove non-Enriched:
+mini_assignment_table <- mini_assignment_table[names(mini_assignment_table) != "Non-Enriched"]
+
+top_3_lineages <- names(mini_assignment_table)[1:3]
+
+```
+
+#Run find markers between lineages:
+```{r, include=FALSE}
+
+findmarkers_1_2 <- FindMarkers(seurat_strict_barcode_requirements, ident.1 = top_3_lineages[1], ident.2 = top_3_lineages[2])
+findmarkers_1_2$Genes <- rownames(findmarkers_1_2)
+
+findmarkers_2_3 <- FindMarkers(seurat_strict_barcode_requirements, ident.1 = top_3_lineages[2], ident.2 = top_3_lineages[3])
+findmarkers_2_3$Genes <- rownames(findmarkers_2_3)
+
+findmarkers_1_3 <- FindMarkers(seurat_strict_barcode_requirements, ident.1 = top_3_lineages[1], ident.2 = top_3_lineages[3])
+findmarkers_1_3$Genes <- rownames(findmarkers_1_3)
+
+#Add column for significance:
+findmarkers_1_2$adj_sig <- ifelse(findmarkers_1_2$p_val_adj < 0.05, TRUE, FALSE)
+findmarkers_2_3$adj_sig <- ifelse(findmarkers_2_3$p_val_adj < 0.05, TRUE, FALSE)
+findmarkers_1_3$adj_sig <- ifelse(findmarkers_1_3$p_val_adj < 0.05, TRUE, FALSE)
+
+#Check for overlaps:
+intersect(rownames(findmarkers_1_2[findmarkers_1_2$p_val_adj < 0.05,]), rownames(findmarkers_1_3[findmarkers_1_3$p_val_adj < 0.05,]))
+
+```
+
+#Create -log(adj p-value for plotting):
+```{r, include=FALSE}
+
+findmarkers_1_2$p_val_adj_log10 <- -log10(findmarkers_1_2$p_val_adj)
+findmarkers_2_3$p_val_adj_log10 <- -log10(findmarkers_2_3$p_val_adj)
+findmarkers_1_3$p_val_adj_log10 <- -log10(findmarkers_1_3$p_val_adj)
+
+```
+
+
+#Only take genes with a pct threshold:
+```{r, include=FALSE}
+
+pct_threshold <- 0.05
+
+findmarkers_1_2_pct_threshold <- findmarkers_1_2[ (findmarkers_1_2$pct.1 >= pct_threshold) & (findmarkers_1_2$pct.2 >= pct_threshold) , ]
+findmarkers_2_3_pct_threshold <- findmarkers_2_3[ (findmarkers_2_3$pct.1 >= pct_threshold) & (findmarkers_2_3$pct.2 >= pct_threshold) , ]
+findmarkers_1_3_pct_threshold <- findmarkers_1_3[ (findmarkers_1_3$pct.1 >= pct_threshold) & (findmarkers_1_3$pct.2 >= pct_threshold) , ]
+
+```
+
+
+
+#Plot volcano plot:
+```{r}
+
+#Sort for plotting:
+findmarkers_1_2_pct_threshold <- findmarkers_1_2_pct_threshold %>%
+  arrange(desc(p_val_adj))
+
+p <- ggplot(findmarkers_1_2_pct_threshold, aes(x = avg_log2FC, y = p_val_adj_log10, color = adj_sig)) +
+  ggrastr::rasterize(geom_point(size = 0.5, stroke = 0), dpi = 2400) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black", margin = margin(b=0.1, unit = "cm")),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.spacing.y = unit(0, "cm"),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.border = element_blank(),
+  ) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_color_manual(values = c("FALSE" = "black",
+                     "TRUE" = "red"),
+                     breaks = c("FALSE",
+                                "TRUE")) +
+  labs(x = "Avg. log2(Most Enriched Lineage/2nd Most Enriched Lineage)", 
+       y = "log10(Adj. p-value)")
+
+p
+
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Compare_Lineages/Volcano_Lineage_1st_vs_2nd.pdf", device = cairo_pdf, width = 4, height = 3)
+
+```
+
+#Plot volcano plot:
+```{r}
+
+#Sort for plotting:
+findmarkers_1_3_pct_threshold <- findmarkers_1_3_pct_threshold %>%
+  arrange(desc(p_val_adj))
+
+p <- ggplot(findmarkers_1_3_pct_threshold, aes(x = avg_log2FC, y = p_val_adj_log10, color = adj_sig)) +
+  ggrastr::rasterize(geom_point(size = 0.5, stroke = 0), dpi = 2400) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black", margin = margin(b=0.1, unit = "cm")),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.spacing.y = unit(0, "cm"),
+    legend.key.size = unit(0.2, "cm"),
+    legend.position = "none",
+    panel.border = element_blank(),
+  ) +
+  scale_y_continuous(expand = c(0,0)) +
+  scale_color_manual(values = c("FALSE" = "black",
+                     "TRUE" = "red"),
+                     breaks = c("FALSE",
+                                "TRUE")) +
+  labs(x = "Avg. log2(Most Enriched Lineage/3rd Most Enriched Lineage)", 
+       y = "log10(Adj. p-value)")
+
+p
+
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Compare_Lineages/Volcano_Lineage_1st_vs_3rd.pdf", device = cairo_pdf, width = 4, height = 3)
+
+```
+
+
+

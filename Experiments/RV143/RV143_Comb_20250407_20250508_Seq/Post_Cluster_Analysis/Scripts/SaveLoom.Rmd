@@ -1,0 +1,70 @@
+---
+title: "SaveLoom"
+output: html_document
+date: "2025-09-25"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(SeuratDisk)
+
+
+getwd()
+
+```
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Subset to just "enriched" or "transduced" sample:
+```{r, include=FALSE}
+
+Idents(seurat_strict_barcode_requirements) <- "orig.ident"
+
+just_transduced <- subset(seurat_strict_barcode_requirements, orig.ident == "Enriched")
+
+```
+
+#Save loom file:
+
+```{r, include=FALSE}
+
+temp_seurat <- SetAssayData(
+  just_transduced,
+  assay = "RNA",
+  layer = "data",
+  new.data = GetAssayData(just_transduced, assay = "RNA", layer = "counts")
+)
+
+temp_seurat[["RNA"]]$counts <- NULL
+
+print("Sample of data layer (should be raw counts):")
+print(GetAssayData(temp_seurat, assay = "RNA", layer = "data")[1:10, 1:10])
+
+# Don't normalize - keep only raw counts
+SaveLoom(temp_seurat,
+         filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/SaveLoom/loom_for_SCENIC.loom")
+
+```
+
+
+
+
+

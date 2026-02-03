@@ -1,0 +1,596 @@
+---
+title: "Basic_Barcode_Metrics"
+output: html_document
+date: "2025-11-14"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries and delete variables:
+```{r, include=FALSE}
+
+getwd()
+
+rm(list = ls())
+
+library(Seurat)
+library(ggplot2)
+library(egg)
+library(tidyverse)
+library(ggbreak)
+
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+panel_dimensions <- c(2,1)
+       
+```
+
+#Load data from counts:
+```{r, include=FALSE}
+
+counts_untransduced <- Read10X("RV143_Comb_20250407_20250508_Seq/20250518_RV143_Enrichment_counts_untransduced/outs/raw_feature_bc_matrix")
+
+counts_enriched <- Read10X("RV143_Comb_20250407_20250508_Seq/20250518_RV143_Enrichment_counts_enriched/outs/raw_feature_bc_matrix")
+
+```
+
+#Create Seurat objects:
+```{r, include=FALSE}
+
+seurat_object_untransduced <- CreateSeuratObject(counts = counts_untransduced, project = "Untransduced", min.cells = 3, min.features = 200)
+
+seurat_object_enriched <- CreateSeuratObject(counts = counts_enriched, project = "Enriched", min.cells = 3, min.features = 200)
+
+```
+
+#Remove initial matrices to save space:
+```{r, include=FALSE}
+
+rm(counts_untransduced,counts_enriched)
+
+```
+
+#Add mitochondrial gene % parameter:
+```{r}
+
+seurat_object_untransduced[["percent.mt"]] <- PercentageFeatureSet(seurat_object_untransduced, pattern = "^MT-")
+
+seurat_object_enriched[["percent.mt"]] <- PercentageFeatureSet(seurat_object_enriched, pattern = "^MT-")
+
+```
+
+#Filter with same parameters as in Create_Seurat_Objects:
+```{r, include=FALSE}
+
+seurat_object_untransduced_standard_filter <- subset(seurat_object_untransduced, subset = nFeature_RNA > 200 & nFeature_RNA < 9000 & nCount_RNA > 10000 & percent.mt < 10)
+
+rm(seurat_object_untransduced)
+
+seurat_object_enriched_standard_filter <- subset(seurat_object_enriched, subset = nFeature_RNA > 200 & nFeature_RNA < 9000 & nCount_RNA > 10000 & percent.mt < 10)
+
+rm(seurat_object_enriched)
+
+```
+
+
+
+#Load barcode count dataframe:
+```{r, include=FALSE}
+
+barcode_data <- read.table("RV143_Comb_20250407_20250508_Seq/20250520_Unmapped/EB_output_modified.txt")
+
+colnames(barcode_data) <- c("Cell_Barcode","UMI","Lineage_Barcode","StartSeq_Type","Sample")
+
+```
+
+
+#Get counts of each UMI per cell barcode, lineage barcode combination, this will be added to the seurat object as an assay:
+```{r, include=FALSE}
+
+#Do this for untransduced cells:
+
+#Subset untransduced cells:
+barcode_data_untransduced <- barcode_data[barcode_data$Sample == "untransduced_step1_unmapped.txt",]
+
+#Do this for 
+lineage_counts_untransduced <- barcode_data_untransduced %>%
+  # Group by Cell_Barcode and Lineage_Barcode
+  group_by(Lineage_Barcode, Cell_Barcode) %>%
+  # Count unique UMIs
+  summarize(count = n_distinct(UMI)) %>%
+  # Ungroup
+  ungroup() %>%
+  # Pivot wider to create matrix-like format needed for Seurat
+  pivot_wider(
+    names_from = Cell_Barcode,
+    values_from = count,
+    values_fill = 0
+  ) %>%
+  # Convert Cell_Barcode to row names
+  column_to_rownames("Lineage_Barcode")
+
+
+
+#Subset enriched cells:
+barcode_data_enriched <- barcode_data[barcode_data$Sample == "enriched_step1_unmapped.txt",]
+
+#Do this for 
+lineage_counts_enriched <- barcode_data_enriched %>%
+  # Group by Cell_Barcode and Lineage_Barcode
+  group_by(Lineage_Barcode, Cell_Barcode) %>%
+  # Count unique UMIs
+  summarize(count = n_distinct(UMI)) %>%
+  # Ungroup
+  ungroup() %>%
+  # Pivot wider to create matrix-like format needed for Seurat
+  pivot_wider(
+    names_from = Cell_Barcode,
+    values_from = count,
+    values_fill = 0
+  ) %>%
+  # Convert Cell_Barcode to row names
+  column_to_rownames("Lineage_Barcode")
+
+#Remove original barcode data to save memory:
+rm(barcode_data)
+
+```
+
+
+#Add a row of zeros for cell barcodes without any lineage barcodes, necessary to add it to the Seurat object:
+```{r, include=FALSE}
+
+#Do this for untransduced:
+
+# Add any missing cell barcodes as columns with zeros
+missing_cols <- setdiff(colnames(seurat_object_untransduced_standard_filter), colnames(lineage_counts_untransduced))
+if(length(missing_cols) > 0) {
+  zero_matrix <- matrix(0, 
+                       nrow = nrow(lineage_counts_untransduced), 
+                       ncol = length(missing_cols),
+                       dimnames = list(rownames(lineage_counts_untransduced), missing_cols))
+  barcode_data_untransduced_complete <- cbind(lineage_counts_untransduced, zero_matrix)
+}
+
+# Sort columns to match Seurat object order
+barcode_data_untransduced_complete <- barcode_data_untransduced_complete[, colnames(seurat_object_untransduced_standard_filter)]
+
+#Do this for enriched:
+
+# Add any missing cell barcodes as columns with zeros
+missing_cols <- setdiff(colnames(seurat_object_enriched_standard_filter), colnames(lineage_counts_enriched))
+if(length(missing_cols) > 0) {
+  zero_matrix <- matrix(0, 
+                       nrow = nrow(lineage_counts_enriched), 
+                       ncol = length(missing_cols),
+                       dimnames = list(rownames(lineage_counts_enriched), missing_cols))
+  barcode_data_enriched_complete <- cbind(lineage_counts_enriched, zero_matrix)
+}
+
+# Sort columns to match Seurat object order
+barcode_data_enriched_complete <- barcode_data_enriched_complete[, colnames(seurat_object_enriched_standard_filter)]
+
+```
+
+
+#Add lineage barcode assay (counts) to the Seurat objects:
+```{r, include=FALSE}
+
+# Add lineage dataframe as an assay:
+
+seurat_object_untransduced_standard_filter[["Lineage_Assay"]] <- CreateAssayObject(counts = barcode_data_untransduced_complete)
+
+rm(barcode_data_untransduced_complete)
+
+
+seurat_object_enriched_standard_filter[["Lineage_Assay"]] <- CreateAssayObject(counts = barcode_data_enriched_complete)
+
+rm(barcode_data_enriched_complete, barcode_data_enriched, barcode_data_untransduced, lineage_counts_enriched, lineage_counts_untransduced, zero_matrix, missing_cols)
+
+```
+
+#Get metrics for lineage barcodes from untransduced and transduced/enriched separately:
+```{r, include=FALSE}
+
+#Get number of unique lineage barcodes:
+number_of_unique_lineage_barcodes_per_cell_untransduced <- colSums(seurat_object_untransduced_standard_filter[["Lineage_Assay"]]@counts > 0)
+histogram_number_of_unique_lineage_barcodes_per_cell_untransduced <- table(number_of_unique_lineage_barcodes_per_cell_untransduced)
+plot(histogram_number_of_unique_lineage_barcodes_per_cell_untransduced, xlab = "Unique Non-Zero Lineage Barcodes", ylab = "Number of Cells")
+
+
+#Get number of unique lineage barcodes:
+number_of_unique_lineage_barcodes_per_cell_enriched <- colSums(seurat_object_enriched_standard_filter[["Lineage_Assay"]]@counts > 0)
+histogram_number_of_unique_lineage_barcodes_per_cell_enriched <- table(number_of_unique_lineage_barcodes_per_cell_enriched)
+plot(histogram_number_of_unique_lineage_barcodes_per_cell_enriched, xlab = "Unique Non-Zero Lineage Barcodes", ylab = "Number of Cells")
+
+
+#Change table to dataframe:
+histogram_number_of_unique_lineage_barcodes_per_cell_untransduced_df <- as.data.frame(t(histogram_number_of_unique_lineage_barcodes_per_cell_untransduced))
+#Remove 1st row rows:
+histogram_number_of_unique_lineage_barcodes_per_cell_untransduced_df <- histogram_number_of_unique_lineage_barcodes_per_cell_untransduced_df[,2:3]
+#Rename for joining:
+colnames(histogram_number_of_unique_lineage_barcodes_per_cell_untransduced_df) <- c("Number_Unique_Lineage_Barcodes","Number_Cells")
+
+#Change table to dataframe:
+histogram_number_of_unique_lineage_barcodes_per_cell_enriched_df <- as.data.frame(t(histogram_number_of_unique_lineage_barcodes_per_cell_enriched))
+#Remove 1st row rows:
+histogram_number_of_unique_lineage_barcodes_per_cell_enriched_df <- histogram_number_of_unique_lineage_barcodes_per_cell_enriched_df[,2:3]
+#Rename for joining:
+colnames(histogram_number_of_unique_lineage_barcodes_per_cell_enriched_df) <- c("Number_Unique_Lineage_Barcodes","Number_Cells")
+
+
+#Comnbine dataframes:
+histogram_number_of_unique_lineage_barcodes_per_cell <- bind_rows(
+  mutate(histogram_number_of_unique_lineage_barcodes_per_cell_untransduced_df, source = "untransduced"),
+  mutate(histogram_number_of_unique_lineage_barcodes_per_cell_enriched_df, source = "enriched")
+)
+
+#Convert number of unique lineage barcodes to numeric:
+histogram_number_of_unique_lineage_barcodes_per_cell$Number_Unique_Lineage_Barcodes <- 
+  as.numeric(as.character(histogram_number_of_unique_lineage_barcodes_per_cell$Number_Unique_Lineage_Barcodes))
+
+#For plotting add zeros to missing values:
+histogram_number_of_unique_lineage_barcodes_per_cell <- 
+  histogram_number_of_unique_lineage_barcodes_per_cell %>%
+  complete(Number_Unique_Lineage_Barcodes, 
+           source = c("untransduced", "enriched"), 
+           fill = list(Number_Cells = 0))
+
+histogram_number_of_unique_lineage_barcodes_per_cell_percentage <- 
+  
+histogram_number_of_unique_lineage_barcodes_per_cell$percentage <- ave(histogram_number_of_unique_lineage_barcodes_per_cell$Number_Cells, histogram_number_of_unique_lineage_barcodes_per_cell$source, FUN = function(x) x * 100/ sum(x))
+
+
+  
+
+```
+
+#Plot number of unique lineage barcodes:
+```{r}
+
+ggplot(histogram_number_of_unique_lineage_barcodes_per_cell, aes(x = Number_Unique_Lineage_Barcodes,
+                                                                 y = Number_Cells,
+                                                                 fill = factor(source, levels = c("untransduced", "enriched")))) +
+  geom_col(stat = "Identity",
+           width = 0.3,
+           position = position_dodge(width = 0.3)) +
+  theme_bw() +
+  scale_fill_discrete(direction = -1) +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black")
+  ) +
+  scale_x_continuous(breaks = seq(from =0, to = 14, by =2)) +
+  scale_y_continuous(limits = c(0, 6000)) +
+  xlab("Number of Unique Lineage Barcodes Per Cell") +
+  ylab("Number of Cells") +
+  ggbreak::scale_y_cut(breaks = c(70), which = c(0))
+
+ggsave(filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Basic_Barcode_Metrics/Unique_Barcodes.pdf",
+       device = cairo_pdf,
+       width = 6, 
+       height = 3)
+
+```
+
+#Get umis of max lineage barcode:
+```{r, include=FALSE}
+
+umi_of_max_lineage_barcode_untransduced <- table(apply(seurat_object_untransduced_standard_filter[["Lineage_Assay"]]@counts, 2, max))
+
+umi_of_max_lineage_barcode_enriched <- table(apply(seurat_object_enriched_standard_filter[["Lineage_Assay"]]@counts, 2, max))
+
+#Make dataframes:
+umi_of_max_lineage_barcode_untransduced_df <- as.data.frame(t(umi_of_max_lineage_barcode_untransduced))
+umi_of_max_lineage_barcode_untransduced_df <- umi_of_max_lineage_barcode_untransduced_df[,2:3]
+colnames(umi_of_max_lineage_barcode_untransduced_df) <- c("Max_Lineage_Barcode_UMIs", "Number_Cells")
+
+umi_of_max_lineage_barcode_enriched_df <- as.data.frame(t(umi_of_max_lineage_barcode_enriched))
+umi_of_max_lineage_barcode_enriched_df <- umi_of_max_lineage_barcode_enriched_df[,2:3]
+colnames(umi_of_max_lineage_barcode_enriched_df) <- c("Max_Lineage_Barcode_UMIs", "Number_Cells")
+
+umi_of_max_lineage_barcode_df <- bind_rows(
+  mutate(umi_of_max_lineage_barcode_untransduced_df, source = "untransduced"),
+  mutate(umi_of_max_lineage_barcode_enriched_df, source = "enriched")
+)
+
+#Convert number of umis to numeric:
+umi_of_max_lineage_barcode_df$Max_Lineage_Barcode_UMIs <- as.numeric(as.character(umi_of_max_lineage_barcode_df$Max_Lineage_Barcode_UMIs))
+
+
+#For plotting add zeros to missing values:
+umi_of_max_lineage_barcode_df <- 
+  umi_of_max_lineage_barcode_df %>%
+  complete(Max_Lineage_Barcode_UMIs, 
+           source = c("untransduced", "enriched"), 
+           fill = list(Number_Cells = 0))
+
+umi_of_max_lineage_barcode_df$percentage <- ave(umi_of_max_lineage_barcode_df$Number_Cells, umi_of_max_lineage_barcode_df$source, FUN = function(x) x * 100/ sum(x))
+
+100-sum(umi_of_max_lineage_barcode_df[umi_of_max_lineage_barcode_df$Max_Lineage_Barcode_UMIs < 3 & umi_of_max_lineage_barcode_df$source == "untransduced",]$percentage)
+
+100-sum(umi_of_max_lineage_barcode_df[umi_of_max_lineage_barcode_df$Max_Lineage_Barcode_UMIs < 3 & umi_of_max_lineage_barcode_df$source == "enriched",]$percentage)
+
+
+```
+
+
+#Plot umis of max lineage barcode:
+```{r}
+
+ggplot(umi_of_max_lineage_barcode_df, aes(x = Max_Lineage_Barcode_UMIs,
+                                                                 y = Number_Cells,
+                                                                 fill = factor(source, levels = c("untransduced", "enriched")))) +
+  geom_col(stat = "Identity",
+           width = 0.3,
+           position = position_dodge2(width = 0.3, preserve = "single")) +
+  theme_bw() +
+  scale_fill_discrete(direction = -1) +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_y_continuous(limits = c(0, 1000)) +
+  xlab("UMI Count of Lineage Barcode with Most UMIs") +
+  ylab("Number of Cells") +
+  ggbreak::scale_y_cut(breaks = c(10), which = c(0))
+
+ggsave(filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Basic_Barcode_Metrics/Max_UMI_Lineage_Barcodes.pdf",
+       device = cairo_pdf,
+       width = 3, 
+       height = 2.5)
+
+```
+
+
+
+#Get total umis of all lineage barcodes:
+```{r, include=FALSE}
+
+total_umis_lineage_barcode_untransduced <- table(colSums(seurat_object_untransduced_standard_filter[["Lineage_Assay"]]@counts))
+
+total_umis_lineage_barcode_enriched <- table(colSums(seurat_object_enriched_standard_filter[["Lineage_Assay"]]@counts))
+
+#Make dataframes:
+total_umi_lineage_barcode_untransduced_df <- as.data.frame(t(total_umis_lineage_barcode_untransduced))
+total_umi_lineage_barcode_untransduced_df <- total_umi_lineage_barcode_untransduced_df[,2:3]
+colnames(total_umi_lineage_barcode_untransduced_df) <- c("Total_Lineage_Barcode_UMIs", "Number_Cells")
+
+total_umi_lineage_barcode_enriched_df <- as.data.frame(t(total_umis_lineage_barcode_enriched))
+total_umi_lineage_barcode_enriched_df <- total_umi_lineage_barcode_enriched_df[,2:3]
+colnames(total_umi_lineage_barcode_enriched_df) <- c("Total_Lineage_Barcode_UMIs", "Number_Cells")
+
+total_umi_lineage_barcode_df <- bind_rows(
+  mutate(total_umi_lineage_barcode_untransduced_df, source = "untransduced"),
+  mutate(total_umi_lineage_barcode_enriched_df, source = "enriched")
+)
+
+#Convert number of umis to numeric:
+total_umi_lineage_barcode_df$Total_Lineage_Barcode_UMIs <- as.numeric(as.character(total_umi_lineage_barcode_df$Total_Lineage_Barcode_UMIs))
+
+
+#For plotting add zeros to missing values:
+total_umi_lineage_barcode_df <- 
+  total_umi_lineage_barcode_df %>%
+  complete(Total_Lineage_Barcode_UMIs, 
+           source = c("untransduced", "enriched"), 
+           fill = list(Number_Cells = 0))
+
+```
+
+
+
+
+#Plot umis of total lineage barcodes:
+```{r}
+
+ggplot(total_umi_lineage_barcode_df, aes(x = Total_Lineage_Barcode_UMIs,
+                                                                 y = Number_Cells,
+                                                                 fill = factor(source, levels = c("untransduced", "enriched")))) +
+  geom_col(stat = "Identity",
+           width = 0.3,
+           position = position_dodge2(width = 0.3, preserve = "single")) +
+  theme_bw() +
+  scale_fill_discrete(direction = -1) +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_y_continuous(limits = c(0, 1000)) +
+  xlab("Total UMI Count Across All Lineage Barcodes") +
+  ylab("Number of Cells") +
+  ggbreak::scale_y_cut(breaks = c(15), which = c(0))
+
+ggsave(filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Basic_Barcode_Metrics/Total_UMI_Lineage_Barcodes.pdf",
+       device = cairo_pdf,
+       width = 3, 
+       height = 2.5)
+
+```
+
+#Make dataframe for the number of unique barcodes per cell separately:
+```{r, include=FALSE}
+
+num_unique_barcodes_df <- data.frame(
+  Num_Unique_Barcodes = c(number_of_unique_lineage_barcodes_per_cell_untransduced, number_of_unique_lineage_barcodes_per_cell_enriched),
+  Sample = c(rep("Untransduced", length(number_of_unique_lineage_barcodes_per_cell_untransduced)), 
+             rep("Enriched", length(number_of_unique_lineage_barcodes_per_cell_enriched)))
+)
+
+```
+
+#Plot number of unique barcodes:
+```{r}
+
+ggplot(data = num_unique_barcodes_df, aes(x = Sample, y = Num_Unique_Barcodes)) +
+  geom_jitter(color = "gray60", size = 0.001, shape = 16, height = 0) +
+  geom_boxplot(aes(fill = Sample), outlier.shape = NA, linewidth = 0.1, alpha = 0.7, color = "black") +
+  scale_x_discrete(limits = c("Untransduced", "Enriched"), labels = c("Control\nProtocol", "Enrichment\nProtocol")) +
+  ylab("Number of Unique\nLineage Barcodes") +
+  xlab("") +
+  theme_classic() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  )
+
+ggsave(filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Basic_Barcode_Metrics/Num_Unique_Barcodes_BoxPlot.pdf",
+       device = cairo_pdf,
+       width = 2, 
+       height = 2.5)
+  
+
+```
+
+#Make max dataframe for each cell separately:
+```{r, include=FALSE}
+
+#Get max umi count of unique barcode:
+umi_of_max_barcode_transduced <- data.frame(Max_UMI = apply(seurat_object_enriched_standard_filter[["Lineage_Assay"]]@counts, 2, max), Sample = seurat_object_enriched_standard_filter$orig.ident)
+
+umi_of_max_barcode_untransduced <- data.frame(Max_UMI = apply(seurat_object_untransduced_standard_filter[["Lineage_Assay"]]@counts, 2, max), Sample = seurat_object_untransduced_standard_filter$orig.ident)
+
+#merge dataframes:
+umi_of_max_barcode <- rbind(umi_of_max_barcode_transduced, umi_of_max_barcode_untransduced)
+
+#Delete original dataframes:
+rm(umi_of_max_barcode_transduced, umi_of_max_barcode_untransduced)
+
+```
+
+```{r}
+
+ggplot(data = umi_of_max_barcode, aes(x = Sample, y = Max_UMI)) +
+  geom_jitter(color = "gray60", size = 0.001, shape = 16, height = 0) +
+  geom_boxplot(aes(fill = Sample), outlier.shape = NA, linewidth = 0.1, alpha = 0.7, color = "black") +
+  scale_x_discrete(limits = c("Untransduced", "Enriched"), labels = c("Control\nProtocol", "Enrichment\nProtocol")) +
+  ylab("Maximum Lineage\nBarcode UMI Count") +
+  xlab("") +
+  theme_classic() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  )
+
+ggsave(filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Basic_Barcode_Metrics/Max_UMI_Lineage_Barcodes_BoxPlot.pdf",
+       device = cairo_pdf,
+       width = 2, 
+       height = 2.5)
+  
+
+```
+
+#Create sum of lineage umis for each cell separately:
+```{r, include=FALSE}
+
+
+#Get sum of umi counts of barcodes:
+umi_of_sum_barcode_untransduced <- data.frame(Sum_UMI = colSums(seurat_object_untransduced_standard_filter[["Lineage_Assay"]]@counts), Sample = seurat_object_untransduced_standard_filter$orig.ident)
+
+#Get sum of umi counts of barcodes:
+umi_of_sum_barcode_transduced <- data.frame(Sum_UMI = colSums(seurat_object_enriched_standard_filter[["Lineage_Assay"]]@counts), Sample = seurat_object_enriched_standard_filter$orig.ident)
+
+#merge dataframes:
+umi_of_sum_barcode <- rbind(umi_of_sum_barcode_untransduced, umi_of_sum_barcode_transduced)
+
+#Delete original dataframes:
+rm(umi_of_sum_barcode_untransduced, umi_of_sum_barcode_transduced)
+
+```
+
+
+
+```{r}
+
+ggplot(data = umi_of_sum_barcode, aes(x = Sample, y = Sum_UMI)) +
+  geom_jitter(color = "gray60", size = 0.001, shape = 16, height = 0) +
+  geom_boxplot(aes(fill = Sample), outlier.shape = NA, linewidth = 0.1, alpha = 0.7, color = "black") +
+  scale_fill_discrete(limits = c("Enriched", "Untransduced")) +
+  scale_x_discrete(limits = c("Untransduced", "Enriched"), labels = c("Control\nProtocol", "Enrichment\nProtocol")) +
+  ylab("Sum of Lineage\nBarcode UMI Counts") +
+  xlab("") +
+  theme_classic() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, vjust = 0.5, hjust = 1),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    plot.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  )
+
+ggsave(filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Basic_Barcode_Metrics/Sum_UMI_Lineage_Barcodes_BoxPlot.pdf",
+       device = cairo_pdf,
+       width = 2, 
+       height = 2.5)
+  
+
+```
+
+#Get combined barcode metrics for text:
+```{r}
+
+#Get percentage of cells with 1 Barcode UMI (max count > 0)
+print(sum(umi_of_max_barcode$Max_UMI > 0)*100/dim(umi_of_max_barcode)[1])
+
+#Get percentage of cells with 3 Barcode UMI (max count >= 3)
+print(sum(umi_of_max_barcode$Max_UMI >= 3)*100/dim(umi_of_max_barcode)[1])
+
+#Get percentage of cells wtih only one detectable barcodes:
+print(sum(num_unique_barcodes_df$Num_Unique_Barcodes>1)*100/sum(num_unique_barcodes_df$Num_Unique_Barcodes>0))
+
+```
+
+
