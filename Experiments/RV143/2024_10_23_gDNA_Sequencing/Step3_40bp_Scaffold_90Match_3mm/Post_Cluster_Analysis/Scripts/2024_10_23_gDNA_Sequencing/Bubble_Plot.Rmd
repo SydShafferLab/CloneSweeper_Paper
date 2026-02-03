@@ -1,0 +1,301 @@
+---
+title: "Bubble_Plot"
+output: html_document
+date: "2025-12-15"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(ggplot2)
+library(reshape2)
+
+
+```
+
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+#Load spike-ins:
+spike_in_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv", row.names = 1)
+
+threshold_info <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/threshold_type_dataframe.csv", row.names = 1)
+
+
+```
+
+
+
+#Get proportions of gDNA barcodes:
+```{r, include=FALSE}
+
+gDNA_proportion <- sweep(gDNA_counts, 2, colSums(gDNA_counts), "/")
+
+```
+
+#Get lineage barcodes that pass the 200 (>=) threshold in at least one group, using pools separately:
+```{r, include=FALSE}
+
+gDNA_proportion_200 <- gDNA_proportion[rowSums(threshold_info == "Two_Hundred") >= 1, ]
+
+#Get pools separately:
+gDNA_proportion_200_posttreatment_pool_1 <- gDNA_proportion[,c("Pre1","X1A","X1B")]
+  
+gDNA_proportion_200_posttreatment_pool_2 <- gDNA_proportion[,c("Pre2","X2A","X2B")]
+
+#Get thresholded in just post-treatment samples:
+gDNA_proportion_200_posttreatment_pool_1 <- gDNA_proportion_200_posttreatment_pool_1[rowSums(threshold_info[,c("X1A","X1B")] == "Two_Hundred") >= 1, ]
+
+gDNA_proportion_200_posttreatment_pool_2 <- gDNA_proportion_200_posttreatment_pool_2[rowSums(threshold_info[,c("X2A","X2B")] == "Two_Hundred") >= 1, ]
+
+#
+
+#Look at overlapping barcodes from both datasets:
+print(intersect(rownames(gDNA_proportion_200_posttreatment_pool_1), rownames(gDNA_proportion_200_posttreatment_pool_2)))
+
+```
+
+
+#Melt data frames and reorder based on pre1
+```{r, include=FALSE}
+
+gDNA_proportion_200_posttreatment_pool_1$Lineage <- rownames(gDNA_proportion_200_posttreatment_pool_1) 
+gDNA_proportion_200_posttreatment_pool_2$Lineage <- rownames(gDNA_proportion_200_posttreatment_pool_2)
+
+gDNA_proportion_200_posttreatment_pool_1_melt <- melt(gDNA_proportion_200_posttreatment_pool_1)
+gDNA_proportion_200_posttreatment_pool_2_melt <- melt(gDNA_proportion_200_posttreatment_pool_2)
+
+colnames(gDNA_proportion_200_posttreatment_pool_1_melt) <- c("Lineage","Source", "Proportion")
+colnames(gDNA_proportion_200_posttreatment_pool_2_melt) <- c("Lineage","Source", "Proportion")
+
+lineage_order <- gDNA_proportion_200_posttreatment_pool_1_melt %>%
+  filter(Source == "Pre1") %>%
+  arrange(Proportion) %>%
+  pull(Lineage)
+
+# Reorder the Lineage factor based on the calculated order
+gDNA_proportion_200_posttreatment_pool_1_melt$Lineage <- 
+  factor(gDNA_proportion_200_posttreatment_pool_1_melt$Lineage, 
+         levels = lineage_order)
+
+lineage_order <- gDNA_proportion_200_posttreatment_pool_2_melt %>%
+  filter(Source == "Pre2") %>%
+  arrange(Proportion) %>%
+  pull(Lineage)
+
+# Reorder the Lineage factor based on the calculated order
+gDNA_proportion_200_posttreatment_pool_2_melt$Lineage <- 
+  factor(gDNA_proportion_200_posttreatment_pool_2_melt$Lineage, 
+         levels = lineage_order)
+
+
+
+
+```
+
+
+
+#Create a bubble plot pool 1:
+
+```{r}
+
+ggplot(gDNA_proportion_200_posttreatment_pool_1_melt, aes(x = Source, y = Lineage, size = Proportion)) + 
+      geom_point(shape = 21, fill = NA) + 
+      scale_size(range = c(.1, 24)) + 
+      theme_minimal() +
+      theme(
+        legend.key = element_blank(),
+        axis.text.x = element_text(vjust = 1),
+        axis.text.y = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        panel.grid.minor = element_blank()
+      ) + 
+      labs(
+        x = "", 
+        y = "", 
+        size = "Proportion of Reads", 
+        fill = ""
+      )
+
+```
+
+
+#Create a bubble plot, pool 2:
+
+```{r}
+
+ggplot(gDNA_proportion_200_posttreatment_pool_2_melt, aes(x = Source, y = Lineage, size = Proportion)) + 
+      geom_point(shape = 21, fill = NA) + 
+      scale_size(range = c(.1, 24)) + 
+      theme_minimal() +
+      theme(
+        legend.key = element_blank(),
+        axis.text.x = element_text(vjust = 1),
+        axis.text.y = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        panel.grid.minor = element_blank()
+      ) + 
+      labs(
+        x = "", 
+        y = "", 
+        size = "Proportion of Reads", 
+        fill = ""
+      )
+
+```
+
+
+#Get dataframe normalized by thresholded barcodes only:
+```{r, include=FALSE}
+
+#Get lineages 200 cells or more in pool 1 for counts:
+gDNA_counts_200_pool_1 <- gDNA_counts[rownames(gDNA_proportion_200_posttreatment_pool_1),c("Pre1","X1A","X1B")]
+#Normalize dataframe pool 1:
+gDNA_counts_200_pool_1_normalized <- sweep(gDNA_counts_200_pool_1, 2, colSums(gDNA_counts_200_pool_1), "/")
+#Melt dataframe, pool 1:
+gDNA_counts_200_pool_1_normalized$Lineage <- rownames(gDNA_counts_200_pool_1)
+gDNA_counts_200_pool_1_normalized_melted <- melt(gDNA_counts_200_pool_1_normalized)
+colnames(gDNA_counts_200_pool_1_normalized_melted) <- c("Lineage","Source","Proportion")
+
+#Put lineages in order of pre for pool 1:
+lineage_order <- gDNA_counts_200_pool_1_normalized_melted %>%
+  filter(Source == "Pre1") %>%
+  arrange(Proportion) %>%
+  pull(Lineage)
+
+# Reorder the Lineage factor based on the calculated order
+gDNA_counts_200_pool_1_normalized_melted$Lineage <- 
+  factor(gDNA_counts_200_pool_1_normalized_melted$Lineage, 
+         levels = lineage_order)
+
+
+
+#Get lineages 200 cells or more in pool 2 for counts:
+gDNA_counts_200_pool_2 <- gDNA_counts[rownames(gDNA_proportion_200_posttreatment_pool_2),c("Pre2","X2A","X2B")]
+#Normalize dataframe pool 2:
+gDNA_counts_200_pool_2_normalized <- sweep(gDNA_counts_200_pool_2, 2, colSums(gDNA_counts_200_pool_2), "/")
+#Melt dataframe, pool 2:
+gDNA_counts_200_pool_2_normalized$Lineage <- rownames(gDNA_counts_200_pool_2)
+gDNA_counts_200_pool_2_normalized_melted <- melt(gDNA_counts_200_pool_2_normalized)
+colnames(gDNA_counts_200_pool_2_normalized_melted) <- c("Lineage","Source","Proportion")
+
+#Put lineages in order of pre for pool 1:
+lineage_order <- gDNA_counts_200_pool_2_normalized_melted %>%
+  filter(Source == "Pre2") %>%
+  arrange(Proportion) %>%
+  pull(Lineage)
+
+# Reorder the Lineage factor based on the calculated order
+gDNA_counts_200_pool_2_normalized_melted$Lineage <- 
+  factor(gDNA_counts_200_pool_2_normalized_melted$Lineage, 
+         levels = lineage_order)
+
+
+```
+
+
+#Create a bubble plot pool 1, normalized just to thresholded barcodes:
+
+```{r}
+
+rainbow_colors <- c("#FF0000", "#FF7F00", "#00FF00", "#0000FF", "#8B00FF")
+
+#Number of lineages for rainbow:
+n_lineages <- length(unique(gDNA_counts_200_pool_1_normalized_melted$Lineage))
+
+
+ggplot(gDNA_counts_200_pool_1_normalized_melted, aes(x = Source, y = Lineage, size = Proportion)) + 
+      geom_point(shape = 21, fill = NA, aes(color = as.numeric(factor(Lineage)))) + 
+      scale_size(range = c(.1, 24)) + 
+      scale_color_gradientn(colors = rep(rainbow_colors, length.out = n_lineages), guide = "none") +
+      theme_minimal() +
+      theme(
+        legend.key = element_blank(),
+        axis.text.x = element_text(vjust = 0.5, angle = 90, hjust = 1),
+        axis.text.y = element_blank(),
+        panel.grid.major = element_line(color = "gray90"),
+        panel.grid.minor = element_blank(),
+        text = element_text(family = font_type, size = font_size, color = "black"),
+        axis.text = element_text(family = font_type, size = font_size, color = "black")
+      ) +
+      scale_x_discrete(labels = c("Pre1" = "Pre-Treatment  ", "X1A" = "Post-Treatment, Rep. A  ", "X1B" = "Post-Treatment, Rep. B  ")) +
+      labs(
+        x = "", 
+        y = "",
+        size = "Proportion of Reads", 
+        fill = ""
+      ) +
+      #Include bubbles outside the panel/plotting area:
+      coord_cartesian(clip = "off")
+
+
+ggsave(filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Bubble_Plot/Bubble_Plot_Pool1.pdf",
+       device = cairo_pdf,
+       width = 3, 
+       height = 6)
+
+```
+
+#Create a bubble plot pool 2, normalized just to thresholded barcodes:
+
+```{r}
+
+
+rainbow_colors <- c("#FF0000", "#FF7F00", "#00FF00", "#0000FF", "#8B00FF")
+
+#Number of lineages for rainbow:
+n_lineages <- length(unique(gDNA_counts_200_pool_2_normalized_melted$Lineage))
+
+ggplot(gDNA_counts_200_pool_2_normalized_melted, aes(x = Source, y = Lineage, size = Proportion)) + 
+      geom_point(shape = 21, fill = NA, aes(color = as.numeric(factor(Lineage)))) + 
+      scale_size(range = c(.1, 24)) + 
+      scale_color_gradientn(colors = rep(rainbow_colors, length.out = n_lineages), guide = "none") +
+      theme_minimal() +
+      theme(
+        legend.key = element_blank(),
+        axis.text.x = element_text(vjust = 0.5, angle = 90, hjust = 1),
+        axis.text.y = element_blank(),
+        axis.ticks.length.x = unit(1, "in"),
+        panel.grid.major = element_line(color = "gray90"),
+        panel.grid.minor = element_blank(),
+        text = element_text(family = font_type, size = font_size, color = "black"),
+        axis.text = element_text(family = font_type, size = font_size, color = "black")
+      ) +
+      scale_x_discrete(labels = c("Pre2" = "Pre-Treatment  ", "X2A" = "Post-Treatment, Rep. A  ", "X2B" = "Post-Treatment, Rep. B  ")) +
+      labs(
+        x = "", 
+        y = "",
+        size = "Proportion of Reads", 
+        fill = ""
+      ) +
+      #Include bubbles outside the panel/plotting area:
+      coord_cartesian(clip = "off")
+
+
+ggsave(filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Bubble_Plot/Bubble_Plot_Pool2.pdf",
+       device = cairo_pdf,
+       width = 3, 
+       height = 6)
+
+```

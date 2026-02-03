@@ -1,0 +1,194 @@
+---
+title: "Scatter_Plot_Pools_Only"
+output: html_document
+date: "2025-07-02"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+library(dplyr)
+library(ggrastr)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+#Load spike-ins:
+spike_in_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv", row.names = 1)
+
+#Load threshold data:
+threshold_info <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/threshold_type_dataframe.csv", row.names = 1)
+
+
+```
+
+#Get proportions of gDNA counts:
+```{r, include=FALSE}
+
+#Get percentages of counts:
+gDNA_percentage <- sweep(gDNA_counts, 2, colSums(gDNA_counts), "/") * 100
+
+# Calculate spike in means for all columns except Cell_Numbers
+spike_in_means_200 <- sapply(spike_in_counts[spike_in_counts$Cell_Numbers == 200, ][, !names(spike_in_counts[spike_in_counts$Cell_Numbers == 200, ]) %in% "Cell_Numbers"], mean)
+
+#Get spike in means as a percentage of total counts in replicate:
+spike_in_means_200_percentages <- spike_in_means_200*100/colSums(gDNA_counts)
+
+
+#Add column to gDNA_percentage to identify lineage barcodes passing the threshold for pool 1:
+gDNA_percentage$above_threshold_pool1_percentage <- threshold_info$X1A == "Two_Hundred" & threshold_info$X1B == "Two_Hundred"
+
+#Add column to gDNA_percentage to identify lineage barcodes passing the threshold for pool 2:
+gDNA_percentage$above_threshold_pool2_percentage <- threshold_info$X2A == "Two_Hundred" & threshold_info$X2B == "Two_Hundred"
+
+
+```
+
+
+
+#Plot pool 2, percentages:
+```{r}
+
+axis_range <- range(c(gDNA_percentage$X2A, 
+                     gDNA_percentage$X2B))
+
+ggplot(gDNA_percentage, aes(x = X2A, y = X2B, color = Pre2)) +
+  geom_vline(xintercept = 0) +
+  geom_hline(yintercept = 0) +
+  rasterize(geom_point(size = 0.25), dpi = 1200) +
+  rasterize(geom_point(data = subset(gDNA_percentage, above_threshold_pool2_percentage), 
+                      aes(x = X2A, y = X2B), 
+                      size = 1.3, stroke = 0.3, shape = 21, 
+                      fill = NA, color = "red"), dpi = 1200) +
+  labs(x = "% of Reads\nPost-Treatment in Replicate A", 
+       y = "% of Reads\nPost-Treatment in Replicate B",
+       color = "% of Reads in\nPre-Treatment") +
+  scale_color_gradient(low = "gray", high = "black") +
+  coord_equal(xlim = axis_range, ylim = axis_range) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black")
+  ) +
+  #Plot the mean percentage of 200 cells (last 4 rows)
+  geom_vline(xintercept = spike_in_means_200_percentages["X2A"],linetype = "dotted", color = "red", linewidth =0.5) +
+  geom_hline(yintercept = spike_in_means_200_percentages["X2B"],linetype = "dotted", color = "red", linewidth =0.5)
+  
+
+ggsave("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Scatter_Plot_Pools_Only/Pool2_Percentage.pdf", plot = last_plot(), device = cairo_pdf, width = 3, height = 3)
+
+```
+
+#Plot pool 2, percentages, without pretreatment percentages:
+```{r}
+
+
+axis_range <- range(c(gDNA_percentage$X2A, 
+                     gDNA_percentage$X2B))
+
+ggplot(gDNA_percentage, aes(x = X2A, y = X2B)) +
+  rasterize(geom_point(data = subset(gDNA_percentage, !above_threshold_pool2_percentage), 
+                      size = 0.5, color = "grey30"), dpi = 1200) +
+  rasterize(geom_point(data = subset(gDNA_percentage, above_threshold_pool2_percentage), 
+                      aes(x = X2A, y = X2B), 
+                      size = 0.5, color = "red"), dpi = 1200) +
+  labs(x = "% of Reads\nPost-Treatment in Replicate A", 
+       y = "% of Reads\nPost-Treatment in Replicate B",
+       title = "Pool 2") +
+  coord_equal(xlim = axis_range, ylim = axis_range) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.05))) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_classic() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.1),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5)
+  ) +
+  #Plot the mean percentage of 200 cells (last 4 rows)
+  geom_vline(xintercept = spike_in_means_200_percentages["X2A"],linetype = "dotted", color = "red", linewidth =0.5) +
+  geom_hline(yintercept = spike_in_means_200_percentages["X2B"],linetype = "dotted", color = "red", linewidth =0.5)
+  
+ggsave("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Scatter_Plot_Pools_Only/Pool2_Percentage_NoPre.pdf", plot = last_plot(), device = cairo_pdf, width = 2.2, height = 2.2)
+
+
+```
+
+#Plot pool 1, percentages, without pretreatment percentages:
+```{r}
+
+
+axis_range <- range(c(gDNA_percentage$X1A, 
+                     gDNA_percentage$X1B))
+
+ggplot(gDNA_percentage, aes(x = X1A, y = X1B)) +
+  rasterize(geom_point(data = subset(gDNA_percentage, !above_threshold_pool1_percentage), 
+                      size = 0.5, color = "grey30"), dpi = 1200) +
+  rasterize(geom_point(data = subset(gDNA_percentage, above_threshold_pool1_percentage), 
+                      aes(x = X1A, y = X1B), 
+                      size = 0.5, color = "red"), dpi = 1200) +
+  labs(x = "% of Reads\nPost-Treatment in Replicate A", 
+       y = "% of Reads\nPost-Treatment in Replicate B",
+       title = "Pool 1") +
+  coord_equal(xlim = axis_range, ylim = axis_range) +
+  scale_x_continuous(expand = expansion(mult = c(0, 0.05))) +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_classic() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.1),
+    plot.title = element_text(family = font_type, size = font_size, color = "black", hjust = 0.5)
+  ) +
+  #Plot the mean percentage of 200 cells (last 4 rows)
+  geom_vline(xintercept = spike_in_means_200_percentages["X1A"],linetype = "dotted", color = "red", linewidth =0.5) +
+  geom_hline(yintercept = spike_in_means_200_percentages["X1B"],linetype = "dotted", color = "red", linewidth =0.5)
+  
+ggsave("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Scatter_Plot_Pools_Only/Pool1_Percentage_NoPre.pdf", plot = last_plot(), device = cairo_pdf, width = 2.2, height = 2.2)
+
+
+```

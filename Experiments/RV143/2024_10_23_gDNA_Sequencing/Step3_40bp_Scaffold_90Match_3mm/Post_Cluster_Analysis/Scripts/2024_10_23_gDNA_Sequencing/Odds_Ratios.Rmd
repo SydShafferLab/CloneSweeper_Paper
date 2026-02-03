@@ -1,0 +1,111 @@
+---
+title: "Odds_Ratios"
+output: html_document
+date: "2025-12-01"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(tidyverse)
+library(Matrix)
+library(dplyr)
+
+```
+
+#Set parameters:
+```{r, include=FALSE}
+
+read_threshold <- 2
+
+```
+
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+#Load spike-ins:
+spike_in_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv", row.names = 1)
+
+#Load threshold data:
+threshold_info <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/threshold_type_dataframe.csv", row.names = 1)
+
+
+```
+
+#Change threshold info to only show just 200+:
+```{r, include=FALSE}
+
+threshold_binary <- threshold_info == "Two_Hundred"
+
+```
+
+#Get lineages present in one or the other pool:
+```{r, include=FALSE}
+
+gDNA_counts_pool1 <- gDNA_counts[,c("Pre1","X1A","X1B")]
+threshold_info_pool1 <- threshold_binary[,c("Pre1","X1A","X1B")]
+
+  
+gDNA_counts_pool2 <- gDNA_counts[,c("Pre2","X2A","X2B")]
+threshold_info_pool2 <- threshold_binary[,c("Pre2","X2A","X2B")]
+
+threshold_info_pool1 <- threshold_info_pool1[rowSums(gDNA_counts_pool1 != 0) > 0,]
+
+threshold_info_pool2 <- threshold_info_pool2[rowSums(gDNA_counts_pool2 != 0) > 0,]
+
+```
+
+#Get odds ratios without thresholding:
+```{r, include=FALSE}
+
+cont_table_pool1 <- table(threshold_info_pool1[,"X1A"], threshold_info_pool1[,"X1B"], dnn = c("X1A", "X1B"))
+
+cont_table_pool2 <- table(threshold_info_pool2[,"X2A"], threshold_info_pool2[,"X2B"], dnn = c("X2A", "X2B"))
+
+fisher.test(cont_table_pool1)
+
+fisher.test(cont_table_pool2)
+
+```
+
+#Get lineages with read_threshold or higher in one group:
+```{r, include=FALSE}
+
+threshold_info_pool1 <- threshold_binary[,c("Pre1","X1A","X1B")]
+threshold_info_pool1_threshold <- threshold_info_pool1[rowSums(gDNA_counts_pool1 >= read_threshold)>0,]
+
+threshold_info_pool2 <- threshold_binary[,c("Pre2","X2A","X2B")]
+threshold_info_pool2_threshold <- threshold_info_pool2[rowSums(gDNA_counts_pool2 >= read_threshold)>0,]
+
+```
+
+#Get tables and odds ratios for thresholded dataframes:
+```{r, include=FALSE}
+
+cont_table_pool1_thresholded <- table(threshold_info_pool1_threshold[,"X1A"], threshold_info_pool1_threshold[,"X1B"], dnn = c("X1A", "X1B"))
+
+cont_table_pool2_thresholded <- table(threshold_info_pool2_threshold[,"X2A"], threshold_info_pool2_threshold[,"X2B"], dnn = c("X2A", "X2B"))
+
+fisher.test(cont_table_pool1_thresholded)
+
+fisher.test(cont_table_pool2_thresholded)
+
+```
+
+
+
+

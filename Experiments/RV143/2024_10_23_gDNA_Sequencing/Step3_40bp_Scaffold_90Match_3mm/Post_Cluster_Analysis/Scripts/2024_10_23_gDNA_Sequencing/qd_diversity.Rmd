@@ -1,0 +1,465 @@
+---
+title: "qd_diversity"
+output: html_document
+date: "2025-09-18"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(tidyverse)
+library(Matrix)
+library(dplyr)
+library(reshape2)
+library(vegan)
+
+library(egg)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+panel_dimensions <- c(0.65,1.5)
+
+read_threshold <- 2
+
+```
+
+#Define functions:
+```{r, include=FALSE}
+
+#Define revcomp function:
+revcomp <- function(seq) {
+  chartr("ATCG", "TAGC", paste(rev(strsplit(seq, "")[[1]]), collapse=""))
+}
+
+```
+
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+#Get reverse complement for barcode names:
+rownames(gDNA_counts) <- sapply(rownames(gDNA_counts), revcomp)
+
+#Load spike-ins:
+spike_in_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv", row.names = 1)
+
+#Get reverse complement for barcode names:
+rownames(spike_in_counts) <- sapply(rownames(spike_in_counts), revcomp)
+
+
+```
+
+
+
+#Calculate proportions of gDNA reads:
+```{r, include=FALSE}
+
+gDNA_proportion <- sweep(gDNA_counts, 2, colSums(gDNA_counts), "/")
+
+```
+
+#Calculate q_D for each sample:
+```{r, include=FALSE}
+
+#Set range of q values:
+q_values <- c(10^seq(-2, 2, by = 0.001))
+
+q_D_values <- sapply(names(gDNA_proportion), function(col_name) {
+  sapply(q_values, function(q) {
+    (sum(gDNA_proportion[[col_name]]^q))^(1/(1-q))
+  })
+})
+
+#Create a dataframe with q_D values:
+q_D_values_df <- as.data.frame(cbind(q_values, q_D_values))
+
+#Melt dataframe for plotting (except for q)
+q_D_values_df_melt <- melt(q_D_values_df, 
+                           id.vars = "q_values",  
+                           measure.vars = 2:dim(q_D_values_df)[2],  
+                           variable.name = "Sample",
+                           value.name = "qD")
+
+colnames(q_D_values_df_melt) <- c("q", "Sample", "q_D")
+
+#Remove q=1 values for log-log plotting:
+q_D_values_df_melt_nonone_q <- q_D_values_df_melt[q_D_values_df_melt$q != 1, ]
+
+```
+
+#Creat plot for all q_D:
+```{r}
+
+ggplot(q_D_values_df_melt_nonone_q, aes(x = q, y = q_D, colour = Sample)) +
+  geom_line(linewidth = 0.5) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    panel.background = element_rect(fill = "white"),
+    plot.background = element_rect(fill = "white"),
+    axis.text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title = element_text(family = font_type, size = font_size, color = "black"),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.title = element_blank(),
+    legend.key.height = unit(0.75, "lines")
+  ) +
+  xlab("q") +
+  ylab("qD") +
+  scale_x_log10() +
+  scale_y_log10() +
+  scale_color_manual(labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B"), values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan"))
+
+
+ggsave("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/q_D_lineplot.pdf", plot = last_plot(), device = cairo_pdf, width = 5, height = 2)
+
+
+```
+#Get exact barcode counts to check:
+```{r, include=FALSE}
+
+# Count non-zero elements for each column (excluding the first column)
+non_zero_counts <- sapply(gDNA_counts, function(x) sum(x != 0, na.rm = TRUE))
+
+# Create the dataframe with sample names and non-zero counts
+df_number_of_barcodes <- data.frame(
+  Sample = colnames(gDNA_counts),
+  Non_Zero_Count = non_zero_counts
+)
+
+rm(non_zero_counts)
+
+```
+
+#Get individual diversity metrics, without thresholds:
+```{r, include=FALSE}
+
+#Exponent of shannon diversity:
+exp(sapply(gDNA_proportion, function(x) vegan::diversity(x, index = "shannon")))
+
+number_of_unique_barcodes <- colSums(gDNA_proportion != 0)
+number_of_unique_barcodes <- melt(number_of_unique_barcodes)
+number_of_unique_barcodes$Source <- rownames(number_of_unique_barcodes)
+
+shannon_diversity <- sapply(gDNA_proportion, function(x) vegan::diversity(x, index = "shannon"))
+shannon_diversity <- melt(shannon_diversity)
+shannon_diversity$Source <- rownames(shannon_diversity)
+
+simpson_diversity <- sapply(gDNA_proportion, function(x) vegan::diversity(x, index = "simpson"))
+simpson_diversity <- melt(simpson_diversity)
+simpson_diversity$Source <- rownames(simpson_diversity)
+
+```
+
+#Plot untrhesholded number of unique barcodes:
+```{r}
+
+p <- ggplot(data = number_of_unique_barcodes) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B","Pre2","X2A","X2B"),
+    labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B")
+  ) +
+  scale_y_continuous(
+    name = "# of Unique Lineage Barcodes",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Number_of_Barcodes_Unthresholded.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot untrhesholded Shannon diversity:
+```{r}
+
+p <- ggplot(data = shannon_diversity) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B","Pre2","X2A","X2B"),
+    labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B")
+  ) +
+  scale_y_continuous(
+    name = "Shannon Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Shannon_Unthresholded.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+
+#Plot untrhesholded Simpson diversity:
+```{r}
+
+p <- ggplot(data = simpson_diversity) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B","Pre2","X2A","X2B"),
+    labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B")
+  ) +
+  scale_y_continuous(
+    name = "Simpson Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Simpson_Unthresholded.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+#Generate data considering thresholded data:
+```{r, include=FALSE}
+
+gDNA_counts_thresholded <- gDNA_counts[rowSums(gDNA_counts >= read_threshold)>0,]
+
+gDNA_proportion_thresholded <- sweep(gDNA_counts_thresholded, 2, colSums(gDNA_counts), "/")
+
+```
+
+#Get diversity metrics for thresholded reads:
+```{r, include=FALSE}
+
+number_of_unique_barcodes_thresholded <- colSums(gDNA_proportion_thresholded != 0)
+number_of_unique_barcodes_thresholded <- melt(number_of_unique_barcodes_thresholded)
+number_of_unique_barcodes_thresholded$Source <- rownames(number_of_unique_barcodes_thresholded)
+
+shannon_diversity_thresholded <- sapply(gDNA_proportion_thresholded, function(x) vegan::diversity(x, index = "shannon"))
+shannon_diversity_thresholded <- melt(shannon_diversity_thresholded)
+shannon_diversity_thresholded$Source <- rownames(shannon_diversity_thresholded)
+
+simpson_diversity_thresholded <- sapply(gDNA_proportion_thresholded, function(x) vegan::diversity(x, index = "simpson"))
+simpson_diversity_thresholded <- melt(simpson_diversity_thresholded)
+simpson_diversity_thresholded$Source <- rownames(simpson_diversity_thresholded)
+
+```
+
+
+#Plot thesholded number of unique barcodes:
+```{r}
+
+p <- ggplot(data = number_of_unique_barcodes_thresholded) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B","Pre2","X2A","X2B"),
+    labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B")
+  ) +
+  scale_y_continuous(
+    name = "# of Unique Lineage Barcodes",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Number_of_Barcodes_Thresholded.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot trhesholded Shannon diversity:
+```{r}
+
+p <- ggplot(data = shannon_diversity_thresholded) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B","Pre2","X2A","X2B"),
+    labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B")
+  ) +
+  scale_y_continuous(
+    name = "Shannon Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Shannon_Thresholded.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot trhesholded Simpson diversity:
+```{r}
+
+p <- ggplot(data = simpson_diversity_thresholded) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B","Pre2","X2A","X2B"),
+    labels = c("Pre1" = "Pre-Treatment, Pool 1", "X1A" = "Post-Treatment, Pool 1, Replicate A", "X1B" = "Post-Treatment, Pool 1, Replicate B", "X2B" = "Post-Treatment, Pool 1, Replicate B", "Pre2" = "Pre-Treatment, Pool 2", "X2A" = "Post-Treatment, Pool 2, Replicate A", "X2B" = "Post-Treatment, Pool 2, Replicate B")
+  ) +
+  scale_y_continuous(
+    name = "Simpson Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "Pre2" = "blue", "X1A" = "pink", "X1B" = "hotpink", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Simpson_Thresholded.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+
+--------------------#Plot diversity metrics separately for each pool with thresholded gDNA---------------------------
+
+
+#Plot thesholded number of unique barcodes, pool 1:
+```{r}
+
+p <- ggplot(data = number_of_unique_barcodes_thresholded) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = 0.5) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B"),
+    labels = c("Pre1" = "Pre-Treatment", "X1A" = "Post-Treatment, Rep. A", "X1B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "# of Unique Lineage Barcodes",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "X1A" = "pink", "X1B" = "hotpink")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/qd_diversity/Number_of_Barcodes_Thresholded_Pool1.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```

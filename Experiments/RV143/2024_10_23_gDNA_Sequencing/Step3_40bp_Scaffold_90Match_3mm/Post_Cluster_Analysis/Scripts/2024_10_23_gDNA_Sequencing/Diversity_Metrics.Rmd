@@ -1,0 +1,345 @@
+---
+title: "Diversity_Metrics"
+output: html_document
+date: "2025-10-29"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(tidyverse)
+library(Matrix)
+library(dplyr)
+library(reshape2)
+library(vegan)
+
+library(egg)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+panel_dimensions <- c(0.45,1.5)
+bar_width <- 0.5
+
+read_threshold <- 2
+
+```
+
+#Define functions:
+```{r, include=FALSE}
+
+#Define revcomp function:
+revcomp <- function(seq) {
+  chartr("ATCG", "TAGC", paste(rev(strsplit(seq, "")[[1]]), collapse=""))
+}
+
+```
+
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+#Get reverse complement for barcode names:
+rownames(gDNA_counts) <- sapply(rownames(gDNA_counts), revcomp)
+
+#Load spike-ins:
+spike_in_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv", row.names = 1)
+
+#Get reverse complement for barcode names:
+rownames(spike_in_counts) <- sapply(rownames(spike_in_counts), revcomp)
+
+
+```
+
+#Get thresholded data for each pool separately:
+```{r, include=FALSE}
+
+gDNA_counts_thresholded_pool1 <- gDNA_counts[rowSums(gDNA_counts[,c("Pre1","X1A","X1B")] >= read_threshold)>0, c("Pre1","X1A","X1B")]
+
+gDNA_counts_thresholded_pool2 <- gDNA_counts[rowSums(gDNA_counts[,c("Pre2","X2A","X2B")] >= read_threshold)>0, c("Pre2","X2A","X2B")]
+
+
+gDNA_proportion_thresholded_pool1 <- sweep(gDNA_counts_thresholded_pool1, 2, colSums(gDNA_counts_thresholded_pool1), "/")
+
+gDNA_proportion_thresholded_pool2 <- sweep(gDNA_counts_thresholded_pool2, 2, colSums(gDNA_counts_thresholded_pool2), "/")
+
+
+```
+
+
+#Calculate diversity metrics separately for pool 1 and pool 2 using thresholded data:
+```{r, include=FALSE}
+
+#Calculate number of lineage barcodes:
+number_of_unique_barcodes_thresholded_pool1 <- colSums(gDNA_counts_thresholded_pool1 != 0)
+number_of_unique_barcodes_thresholded_pool1 <- melt(number_of_unique_barcodes_thresholded_pool1)
+number_of_unique_barcodes_thresholded_pool1$Source <- rownames(number_of_unique_barcodes_thresholded_pool1)
+
+number_of_unique_barcodes_thresholded_pool2 <- colSums(gDNA_counts_thresholded_pool2 != 0)
+number_of_unique_barcodes_thresholded_pool2 <- melt(number_of_unique_barcodes_thresholded_pool2)
+number_of_unique_barcodes_thresholded_pool2$Source <- rownames(number_of_unique_barcodes_thresholded_pool2)
+
+#Calculate Shannon diversity:
+shannon_diversity_thresholded_pool1 <- sapply(gDNA_proportion_thresholded_pool1, function(x) vegan::diversity(x, index = "shannon"))
+shannon_diversity_thresholded_pool1 <- melt(shannon_diversity_thresholded_pool1)
+shannon_diversity_thresholded_pool1$Source <- rownames(shannon_diversity_thresholded_pool1)
+
+shannon_diversity_thresholded_pool2 <- sapply(gDNA_proportion_thresholded_pool2, function(x) vegan::diversity(x, index = "shannon"))
+shannon_diversity_thresholded_pool2 <- melt(shannon_diversity_thresholded_pool2)
+shannon_diversity_thresholded_pool2$Source <- rownames(shannon_diversity_thresholded_pool2)
+
+#Calculate Simpson diversity:
+simpson_diversity_thresholded_pool1 <- sapply(gDNA_proportion_thresholded_pool1, function(x) vegan::diversity(x, index = "simpson"))
+simpson_diversity_thresholded_pool1 <- melt(simpson_diversity_thresholded_pool1)
+simpson_diversity_thresholded_pool1$Source <- rownames(simpson_diversity_thresholded_pool1)
+
+simpson_diversity_thresholded_pool2 <- sapply(gDNA_proportion_thresholded_pool2, function(x) vegan::diversity(x, index = "simpson"))
+simpson_diversity_thresholded_pool2 <- melt(simpson_diversity_thresholded_pool2)
+simpson_diversity_thresholded_pool2$Source <- rownames(simpson_diversity_thresholded_pool2)
+
+```
+
+
+#Plot thesholded number of unique barcodes, pool 1:
+```{r}
+
+p <- ggplot(data = number_of_unique_barcodes_thresholded_pool1) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = bar_width) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B"),
+    labels = c("Pre1" = "Pre-Treatment", "X1A" = "Post-Treatment, Rep. A", "X1B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "# of Unique Lineage Barcodes",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "X1A" = "pink", "X1B" = "hotpink")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Diversity_Metrics/Number_of_Barcodes_Thresholded_Pool1.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot thesholded number of unique barcodes, pool 2:
+```{r}
+
+p <- ggplot(data = number_of_unique_barcodes_thresholded_pool2) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = bar_width) +
+  scale_x_discrete(
+    limits = c("Pre2","X2A","X2B"),
+    labels = c("Pre2" = "Pre-Treatment", "X2A" = "Post-Treatment, Rep. A", "X2B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "# of Unique Lineage Barcodes",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values =  c("Pre2" = "blue", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Diversity_Metrics/Number_of_Barcodes_Thresholded_Pool2.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot thesholded Shannon diversity, pool 1:
+```{r}
+
+p <- ggplot(data = shannon_diversity_thresholded_pool1) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = bar_width) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B"),
+    labels = c("Pre1" = "Pre-Treatment", "X1A" = "Post-Treatment, Rep. A", "X1B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "Shannon Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "X1A" = "pink", "X1B" = "hotpink")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Diversity_Metrics/Shannon_Thresholded_Pool1.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+#Plot thesholded Shannon diversity, pool 2:
+```{r}
+
+p <- ggplot(data = shannon_diversity_thresholded_pool2) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = bar_width) +
+  scale_x_discrete(
+    limits = c("Pre2","X2A","X2B"),
+    labels = c("Pre2" = "Pre-Treatment", "X2A" = "Post-Treatment, Rep. A", "X2B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "Shannon Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values =  c("Pre2" = "blue", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Diversity_Metrics/Shannon_Thresholded_Pool2.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot thesholded Simpson diversity, pool 1:
+```{r}
+
+p <- ggplot(data = simpson_diversity_thresholded_pool1) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = bar_width) +
+  scale_x_discrete(
+    limits = c("Pre1","X1A","X1B"),
+    labels = c("Pre1" = "Pre-Treatment", "X1A" = "Post-Treatment, Rep. A", "X1B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "Simpson Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values = c("Pre1" = "red", "X1A" = "pink", "X1B" = "hotpink")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Diversity_Metrics/Simpson_Thresholded_Pool1.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```
+
+
+#Plot thesholded Simpson diversity, pool 2:
+```{r}
+
+p <- ggplot(data = simpson_diversity_thresholded_pool2) +
+  geom_bar(aes(x = Source, y = value, fill = Source), stat = "identity", width = bar_width) +
+  scale_x_discrete(
+    limits = c("Pre2","X2A","X2B"),
+    labels = c("Pre2" = "Pre-Treatment", "X2A" = "Post-Treatment, Rep. A", "X2B" = "Post-Treatment, Rep. B")
+  ) +
+  scale_y_continuous(
+    name = "Simpson Diversity Index",
+    expand = expansion(mult = c(0,0.05))
+  ) +
+  theme_bw() +
+  theme(
+    text = element_text(family = font_type, size = font_size, color = "black"),
+    axis.text.x = element_text(family = font_type, size = font_size, color = "black", angle = 90, hjust = 1, vjust = 0.5),
+    axis.text.y = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.x = element_text(family = font_type, size = font_size, color = "black"),
+    axis.title.y = element_text(family = font_type, size = font_size, color = "black", margin = margin(t = 0, r = 0.05, b = 0, l = 0)),
+    legend.text = element_text(family = font_type, size = font_size, color = "black"),
+    legend.position = "none"
+  ) +
+  scale_fill_manual(values =  c("Pre2" = "blue", "X2A" ="turquoise", "X2B" = "cyan")) +
+  xlab("")
+
+p
+
+#Set explicit panel size using egg package:
+p <- set_panel_size(p, 
+                    width  = unit(panel_dimensions[1], "inches"),
+                    height = unit(panel_dimensions[2], "inches"))
+
+ggsave(plot = p, filename = "2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Diversity_Metrics/Simpson_Thresholded_Pool2.pdf", device = cairo_pdf, width = 3, height = 5)
+
+```

@@ -1,0 +1,125 @@
+---
+title: "Compare_RV142_RV143_Barcodes"
+output: html_document
+date: "2024-12-12"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk, set directory to all experiments to access RV142 and RV143 simultaneously:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/')
+
+getwd()
+
+```
+
+#Load Libraries and delete variables:
+```{r, include=FALSE}
+
+getwd()
+
+rm(list = ls())
+
+library(ggplot2)
+library(extrafont)
+#font_import()
+loadfonts()
+library(ggrastr)
+
+library(stringi)
+library(stringr)
+
+```
+
+#Define functions:
+
+```{r, include=FALSE}
+
+#For reverse complementing:
+revcomp <- function(seq) {
+  chartr("ATCG", "TAGC", paste(rev(strsplit(seq, "")[[1]]), collapse=""))
+}
+
+#Function for combining dataframes:
+combine_dataframes <- function(df1, df2) {
+  # Get all unique row names
+  all_rows <- union(rownames(df1), rownames(df2))
+  
+  # Get all column names
+  all_cols <- union(colnames(df1), colnames(df2))
+  
+  # Create empty matrices with all possible rows and columns
+  mat1 <- matrix(0, nrow = length(all_rows), ncol = length(all_cols),
+                 dimnames = list(all_rows, all_cols))
+  mat2 <- mat1
+  
+  # Fill in the values from original dataframes
+  mat1[rownames(df1), colnames(df1)] <- as.matrix(df1)
+  mat2[rownames(df2), colnames(df2)] <- as.matrix(df2)
+  
+  # Combine the matrices
+  result <- mat1 + mat2
+  
+  # Convert back to data frame
+  return(as.data.frame(result))
+}
+
+```
+
+#Load data:
+```{r, include=FALSE}
+
+RV143_reads <- read.csv("RV143/2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+RV142_reads <- read.csv("RV142/2024_08_14_RV142_RV90_gDNA_BCs/Step_3_All_RevCom_23bp_Promoter_3mm_100Match/Organized_Data/all_data_without_spike_ins.csv", row.names = 1)
+
+```
+
+#Reverse complement RV143, and remove startseqs from RV142:
+```{r, include=FALSE}
+
+row.names(RV143_reads) <- sapply(row.names(RV143_reads), revcomp)
+
+row.names(RV142_reads) <- substr(row.names(RV142_reads), 24, 43)
+
+```
+
+#Combine dataframes:
+```{r, include=FALSE}
+
+combined_reads <- combine_dataframes(RV142_reads,RV143_reads)
+
+```
+
+#Do a few quick checks of overlap:
+```{r}
+
+dim(combined_reads[combined_reads$Pre > 0 & combined_reads$Pre1 > 0, ])[1]
+
+dim(combined_reads[combined_reads$Pre > 0 & combined_reads$Pre2 > 0, ])[1]
+
+combined_reads[combined_reads$Pre > 20 & combined_reads$Pre1 > 20, ]
+
+combined_reads[combined_reads$Pre > 20 & combined_reads$Pre2 > 20, ]
+
+combined_reads[combined_reads$Pre1 > 0 & combined_reads$Pre2 > 0, ]
+
+combined_reads[combined_reads$Pre1 > 20 & combined_reads$Pre2 > 20, ]
+
+sumPre <- sum(combined_reads$Pre)
+
+sumPre1 <- sum(combined_reads$Pre1)
+
+sumPre2 <- sum(combined_reads$Pre2)
+
+combined_reads[combined_reads$Pre/sumPre > 0.00001 & combined_reads$Pre2/sumPre2 > 0.00001, ]
+
+140000*70000/nrow(combined_reads[combined_reads$Pre > 0 & combined_reads$Pre1 > 0, ])
+
+140000*70000/nrow(combined_reads[combined_reads$Pre > 0 & combined_reads$Pre2 > 0, ])
+
+140000*140000/nrow(combined_reads[combined_reads$Pre1 > 0 & combined_reads$Pre2 > 0, ])
+
+
+```
+
