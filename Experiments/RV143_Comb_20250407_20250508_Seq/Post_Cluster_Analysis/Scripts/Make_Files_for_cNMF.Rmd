@@ -1,0 +1,94 @@
+---
+title: "Make_Files_for_cNMF"
+output: html_document
+date: "2025-08-19"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(Matrix)
+
+getwd()
+
+set.seed(1)
+
+```
+
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Save tables for cNMF:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements_raw_count <- seurat_strict_barcode_requirements[["RNA"]]$counts
+
+writeMM(seurat_strict_barcode_requirements_raw_count, "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/matrix.mtx")
+
+# Output cell barcodes
+barcodes <- colnames(seurat_strict_barcode_requirements_raw_count)
+write.table(as.data.frame(barcodes), "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/barcodes.tsv",
+            col.names = FALSE, row.names = FALSE, sep = "\t")
+
+# Output feature names
+gene_names <- rownames(seurat_strict_barcode_requirements_raw_count)
+features <- data.frame("gene_id" = gene_names,"gene_name" = gene_names,type = "Gene Expression")
+write.table(as.data.frame(features), sep = "\t", "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/features.tsv",
+            col.names = FALSE, row.names = FALSE)
+
+
+system("gzip RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/matrix.mtx")
+system("gzip RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/barcodes.tsv")
+system("gzip RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/features.tsv")
+
+
+```
+
+
+#Save tables for cNMF for enriched (ie tranduced) only:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements_transduced_only <- subset(x = seurat_strict_barcode_requirements, idents = "Enriched")
+
+seurat_strict_barcode_requirements_raw_count_transduced_only <- seurat_strict_barcode_requirements_transduced_only[["RNA"]]$counts
+
+writeMM(seurat_strict_barcode_requirements_raw_count_transduced_only, "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/Transduced_Only/matrix.mtx")
+
+# Output cell barcodes
+barcodes <- colnames(seurat_strict_barcode_requirements_raw_count_transduced_only)
+write.table(as.data.frame(barcodes), "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/Transduced_Only/barcodes.tsv",
+            col.names = FALSE, row.names = FALSE, sep = "\t")
+
+# Output feature names
+gene_names <- rownames(seurat_strict_barcode_requirements_raw_count_transduced_only)
+features <- data.frame("gene_id" = gene_names,"gene_name" = gene_names,type = "Gene Expression")
+write.table(as.data.frame(features), sep = "\t", "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/Transduced_Only/features.tsv",
+            col.names = FALSE, row.names = FALSE)
+
+
+system("gzip RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/Transduced_Only/matrix.mtx")
+system("gzip RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/Transduced_Only/barcodes.tsv")
+system("gzip RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Make_Files_for_cNMF/Transduced_Only/features.tsv")
+
+
+```
+
+
+

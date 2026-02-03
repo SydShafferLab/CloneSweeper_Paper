@@ -1,0 +1,179 @@
+---
+title: "Seurat_Object_Subset_Comparison"
+output: html_document
+date: "2025-10-09"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(Matrix)
+
+getwd()
+
+set.seed(15)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+
+#Load strict barcode requirements seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Create new Seurat with random subsets:
+```{r, include=FALSE}
+
+Idents(seurat_strict_barcode_requirements) <- "has_targeted_lineage_barcode"
+
+#Create new Seurat object with enriched barcodes:
+seurat_subset_targeted_barcodes <- subset(x = seurat_strict_barcode_requirements, idents = "Targeted_Lineage_Barcode")
+
+#Get untransduced cells:
+Idents(seurat_strict_barcode_requirements) <- "orig.ident"
+
+seurat_subset_untransduced <- subset(x = seurat_strict_barcode_requirements, idents = "Untransduced")
+
+#Remove enriched barcode cells from untransduced:
+Idents(seurat_subset_untransduced) <- "has_targeted_lineage_barcode"
+
+seurat_subset_untransduced <- subset(x = seurat_subset_untransduced, idents = "Not_Targeted_Lineage_Barcode")
+
+#Take a random subset of cells of the same length as targeted barcodes from untransduced:
+random_cells <- sample(x = colnames(seurat_subset_untransduced), size = ncol(x = seurat_subset_targeted_barcodes), replace = FALSE)
+
+seurat_subset_untransduced <- subset(seurat_subset_untransduced, 
+                                    cells = random_cells)
+
+#Remove random cells for organization:
+rm(random_cells)
+
+#Get transduced cells:
+seurat_subset_transduced <- subset(x = seurat_strict_barcode_requirements, idents = "Enriched")
+
+#Remove enriched barcode cells from transduced:
+Idents(seurat_subset_transduced) <- "has_targeted_lineage_barcode"
+
+seurat_subset_transduced <- subset(x = seurat_subset_transduced, idents = "Not_Targeted_Lineage_Barcode")
+
+#Take a random subset of cells of the same length as targeted barcodes from transduced:
+random_cells <- sample(x = colnames(seurat_subset_transduced), size = ncol(x = seurat_subset_targeted_barcodes), replace = FALSE)
+
+seurat_subset_transduced <- subset(seurat_subset_transduced, 
+                                    cells = random_cells)
+
+#Remove random cells for organization:
+rm(random_cells)
+
+#Combine small seurat objects:
+merged_subset_seurat <- merge(x = seurat_subset_targeted_barcodes, y = seurat_subset_transduced)
+merged_subset_seurat <- merge(x = merged_subset_seurat, y = seurat_subset_untransduced)
+
+#Create metadata comnining enriched, transduced and untransduced:
+merged_subset_seurat$condition <- case_when(
+  merged_subset_seurat$orig.ident == "Untransduced" ~ "Untransduced",
+  merged_subset_seurat$orig.ident == "Enriched" & merged_subset_seurat$has_targeted_lineage_barcode == "Not_Targeted_Lineage_Barcode" ~ "Transduced_Not_Enriched",
+  merged_subset_seurat$orig.ident == "Enriched" & merged_subset_seurat$has_targeted_lineage_barcode == "Targeted_Lineage_Barcode" ~ "Transduced_Enriched"
+)
+
+#Set Idents to new variable:
+Idents(merged_subset_seurat) <- "condition"
+
+#Remove all other seurat objects:
+rm(seurat_strict_barcode_requirements, seurat_subset_targeted_barcodes, seurat_subset_transduced, seurat_subset_untransduced)
+
+```
+
+#Run new normalization and dimension reduction:
+```{r, include=FALSE}
+
+merged_subset_seurat <- NormalizeData(merged_subset_seurat,
+              normalization.method = "LogNormalize",
+              scale.factor = 10000)
+
+merged_subset_seurat <- ScaleData(merged_subset_seurat)
+
+merged_subset_seurat <- FindVariableFeatures(merged_subset_seurat)
+
+merged_subset_seurat <- RunPCA(merged_subset_seurat, features = VariableFeatures(object = merged_subset_seurat))
+
+merged_subset_seurat <- FindNeighbors(merged_subset_seurat, dims = 1:10)
+merged_subset_seurat <- FindClusters(merged_subset_seurat, resolution = 0.5)
+
+merged_subset_seurat <- RunUMAP(merged_subset_seurat, dims = 1:10)
+
+```
+
+
+```{r}
+
+DimPlot(merged_subset_seurat, reduction = "umap", group.by = "condition")
+
+DimPlot(merged_subset_seurat, reduction = "pca", group.by = "condition")
+
+VizDimLoadings(merged_subset_seurat, dims = 1:2, reduction = "pca")
+
+FeaturePlot(merged_subset_seurat, features = "nCount_RNA")
+
+FeaturePlot(merged_subset_seurat, features = "NT5E")
+
+FeaturePlot(merged_subset_seurat, features = "EGFR")
+
+FeaturePlot(merged_subset_seurat, features = "NGFR")
+
+FeaturePlot(merged_subset_seurat, features = "FN1")
+
+FeaturePlot(merged_subset_seurat, features = "TYR")
+
+FeaturePlot(merged_subset_seurat, features = "DCT")
+
+FeaturePlot(merged_subset_seurat, features = "NRG3")
+
+FeaturePlot(merged_subset_seurat, features = "PMEL")
+
+FeaturePlot(merged_subset_seurat, features = "MITF")
+
+FeaturePlot(merged_subset_seurat, features = "SOX10")
+
+FeaturePlot(merged_subset_seurat, features = "ITGA3")
+
+FeaturePlot(merged_subset_seurat, features = "COL6A2")
+
+FeaturePlot(merged_subset_seurat, features = "TYRP1")
+
+FeaturePlot(merged_subset_seurat, features = "PAX3")
+
+DimPlot(merged_subset_seurat, reduction = "umap", group.by = "seurat_clusters")
+
+DimPlot(merged_subset_seurat, reduction = "umap", group.by = "Mini_Library_Assignment")
+
+
+
+
+
+
+
+```
