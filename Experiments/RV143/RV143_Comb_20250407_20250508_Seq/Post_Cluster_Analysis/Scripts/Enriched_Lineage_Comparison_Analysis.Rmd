@@ -1,0 +1,203 @@
+---
+title: "Enriched_Lineage_Comparison_Analysis"
+output: html_document
+date: "2026-02-05"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(tidyplots)
+library(dplyr)
+
+getwd()
+
+set.seed(1)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+panel_dimensions <- c(30,30)
+
+```
+
+#Load seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+#Get only cells in enrichment sample:
+```{r, include=FALSE}
+
+Idents(seurat_strict_barcode_requirements) <- "orig.ident"
+
+seurat_strict_barcode_requirements_enrichment_only <- subset(x = seurat_strict_barcode_requirements, idents = "Enriched")
+  
+rm(seurat_strict_barcode_requirements)
+
+```
+
+
+
+#Isolate lineage with 3 or more cells:
+```{r, include=FALSE}
+
+#Get list of lineage with 3 or more cells:
+lineage_list <- names(table(seurat_strict_barcode_requirements_enrichment_only$Mini_Library_Assignment)[table(seurat_strict_barcode_requirements_enrichment_only$Mini_Library_Assignment) >= 3])
+
+#Remove "Non-Enriched" from lineage list:
+lineage_list <- lineage_list[lineage_list != "Non-Enriched"]
+
+Idents(seurat_strict_barcode_requirements_enrichment_only) <- "Mini_Library_Assignment"
+
+#Subset based on list:
+seurat_large_lineages <- subset(x = seurat_strict_barcode_requirements_enrichment_only, idents = lineage_list)
+
+#Remove large seurat object:
+rm(seurat_strict_barcode_requirements_enrichment_only)
+
+#Reset idents:
+Idents(seurat_large_lineages) <- "seurat_clusters"
+
+```
+
+#Run FindAllMarkers comparing each lineage to all others:
+```{r, include=FALSE}
+
+Idents(seurat_large_lineages) <- "Mini_Library_Assignment"
+
+interlineage_findmarkers <- FindAllMarkers(seurat_large_lineages)
+
+```
+
+#Save FindAllMarkers table:
+```{r, include=FALSE}
+
+write.csv2(interlineage_findmarkers, "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Enriched_Lineage_Comparison_Analysis/FindAllMarkers.csv")
+
+```
+
+#Create label list, with the number of cells in each lineage:
+```{r, include=FALSE}
+
+dictionary_labels <- table(seurat_large_lineages$Mini_Library_Assignment) %>% 
+  {setNames(paste0("Lineage ", seq_along(.), " (cells = ", ., ")"), names(.))}
+
+```
+
+#Create dataframe for IL1RAPL1 expression:
+
+```{r, include=FALSE}
+
+IL1RAPL1_df <- FetchData(seurat_large_lineages, 
+                      vars = c("IL1RAPL1", "Mini_Library_Assignment"),
+                      layer = 'data')
+
+```
+
+#Plot IL1RAPL1:
+```{r}
+
+p <- tidyplot(data = IL1RAPL1_df, x = Mini_Library_Assignment, y = IL1RAPL1) |>
+  add_data_points_beeswarm(shape = 16, size = 0.5) |>
+  add_boxplot(show_outliers = FALSE) |>
+  adjust_size(width = panel_dimensions[1], height = panel_dimensions[2]) |>
+  adjust_x_axis(rotate_labels = 90,
+                labels = dictionary_labels) |>
+  adjust_x_axis_title("") |>
+  adjust_y_axis_title("Normalized IL1RAPL1\nExpression") |>
+  adjust_y_axis(limits = c(NA, max(IL1RAPL1_df$IL1RAPL1, na.rm = TRUE) * 1.15)) |>
+  adjust_font(fontsize = font_size, family = font_type) +
+  ggplot2::theme(panel.border = element_rect(color = "black", linewidth = 0.5),
+                 axis.line = element_blank())
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Enriched_Lineage_Comparison/IL1RAPL1.pdf", device = cairo_pdf)
+    
+  
+```
+
+
+#Create dataframe for NRG1 expression:
+
+```{r, include=FALSE}
+
+NRG1_df <- FetchData(seurat_large_lineages, 
+                      vars = c("NRG1", "Mini_Library_Assignment"),
+                      layer = 'data')
+
+```
+
+#Plot NRG1:
+```{r}
+
+p <- tidyplot(data = NRG1_df, x = Mini_Library_Assignment, y = NRG1) |>
+  add_data_points_beeswarm(shape = 16, size = 0.5) |>
+  add_boxplot(show_outliers = FALSE) |>
+  adjust_size(width = panel_dimensions[1], height = panel_dimensions[2]) |>
+  adjust_x_axis(rotate_labels = 90,
+                labels = dictionary_labels) |>
+  adjust_x_axis_title("") |>
+  adjust_y_axis_title("Normalized NRG1\nExpression") |>
+  adjust_y_axis(limits = c(NA, max(NRG1_df$NRG1, na.rm = TRUE) * 1.15)) |>
+  adjust_font(fontsize = font_size, family = font_type) +
+  ggplot2::theme(panel.border = element_rect(color = "black", linewidth = 0.5),
+                 axis.line = element_blank())
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Enriched_Lineage_Comparison/NRG1.pdf", device = cairo_pdf)
+    
+  
+```
+
+
+#Create dataframe for HS6ST2 expression:
+
+```{r, include=FALSE}
+
+HS6ST2_df <- FetchData(seurat_large_lineages, 
+                      vars = c("HS6ST2", "Mini_Library_Assignment"),
+                      layer = 'data')
+
+```
+
+#Plot HS6ST2:
+```{r}
+
+p <- tidyplot(data = HS6ST2_df, x = Mini_Library_Assignment, y = HS6ST2) |>
+  add_data_points_beeswarm(shape = 16, size = 0.5) |>
+  add_boxplot(show_outliers = FALSE) |>
+  adjust_size(width = panel_dimensions[1], height = panel_dimensions[2]) |>
+  adjust_x_axis(rotate_labels = 90,
+                labels = dictionary_labels) |>
+  adjust_x_axis_title("") |>
+  adjust_y_axis_title("Normalized HS6ST2\nExpression") |>
+  adjust_y_axis(limits = c(NA, max(HS6ST2_df$HS6ST2, na.rm = TRUE) * 1.15)) |>
+  adjust_font(fontsize = font_size, family = font_type) +
+  ggplot2::theme(panel.border = element_rect(color = "black", linewidth = 0.5),
+                 axis.line = element_blank())
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Enriched_Lineage_Comparison/HS6ST2.pdf", device = cairo_pdf)
+    
+  
+```
+

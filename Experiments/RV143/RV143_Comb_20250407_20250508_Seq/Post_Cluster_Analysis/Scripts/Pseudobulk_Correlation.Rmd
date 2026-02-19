@@ -1,0 +1,139 @@
+---
+title: "Pseudobulk_Correlation"
+output: html_document
+date: "2026-02-09"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(tidyplots)
+library(dplyr)
+library(reshape2)
+
+getwd()
+
+set.seed(1)
+
+```
+
+#Set variable:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+panel_dimensions <- c(20,20)
+
+```
+
+#Load seurat object:
+```{r, include=FALSE}
+
+seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Organized_Data/Create_Seurat_Objects/seurat_strict_barcode_requirements")
+
+```
+
+
+#Get only cells in enrichment sample:
+```{r, include=FALSE}
+
+Idents(seurat_strict_barcode_requirements) <- "orig.ident"
+
+seurat_strict_barcode_requirements_enrichment_only <- subset(x = seurat_strict_barcode_requirements, idents = "Enriched")
+  
+rm(seurat_strict_barcode_requirements)
+
+```
+
+#Isolate lineage with 3 or more cells:
+```{r, include=FALSE}
+
+#Get list of lineage with 3 or more cells:
+lineage_list <- names(table(seurat_strict_barcode_requirements_enrichment_only$Mini_Library_Assignment)[table(seurat_strict_barcode_requirements_enrichment_only$Mini_Library_Assignment) >= 3])
+
+#Remove "Non-Enriched" from lineage list:
+lineage_list <- lineage_list[lineage_list != "Non-Enriched"]
+
+Idents(seurat_strict_barcode_requirements_enrichment_only) <- "Mini_Library_Assignment"
+
+#Subset based on list:
+seurat_large_lineages <- subset(x = seurat_strict_barcode_requirements_enrichment_only, idents = lineage_list)
+
+#Remove large seurat object:
+rm(seurat_strict_barcode_requirements_enrichment_only)
+
+```
+
+#Create label list, with the number of cells in each lineage:
+```{r, include=FALSE}
+
+dictionary_labels <- table(seurat_large_lineages$Mini_Library_Assignment) %>% 
+  {setNames(paste0("Lineage ", seq_along(.), " (cells = ", ., ")"), names(.))}
+
+```
+
+#Perform pseudobulk:
+```{r, include=FALSE}
+
+pseudobulk_object <- AggregateExpression(seurat_large_lineages)
+
+```
+
+#Threshold pseudobulk object:
+```{r, include=FALSE}
+
+pseudobulk_object$RNA_thresholded <- pseudobulk_object$RNA[rowSums(pseudobulk_object$RNA >= 5) == ncol(pseudobulk_object$RNA),]
+
+```
+
+#Normalize pseudobulked object:
+```{r, include=FALSE}
+
+pseudobulk_object$RNA_thresholded <- LogNormalize(pseudobulk_object$RNA_thresholded)
+
+```
+#Create correlation matrix:
+```{r, include=FALSE}
+
+#Use Spearman since linearity is not important:
+correlation_matrix <- cor(as.data.frame(pseudobulk_object$RNA_thresholded), method = "spearman")
+
+#Melt correlation matrix:
+correlation_matrix_melted <- melt(correlation_matrix)
+
+#Change order for plotting:
+label_order <- names(dictionary_labels)[order(dictionary_labels)]
+
+```
+
+
+```{r}
+
+p <- tidyplot(data = correlation_matrix_melted, x = Var1, y = Var2, color = value) |>
+  add_heatmap() |>
+  adjust_size(width = panel_dimensions[1], height = panel_dimensions[2]) |>
+  adjust_x_axis_title("") |>
+  adjust_y_axis_title("") |>
+  adjust_font(fontsize = font_size, family = font_type) |>
+  adjust_x_axis(labels = dictionary_labels) |>
+  adjust_y_axis(labels = dictionary_labels) |>
+  reorder_x_axis_labels(label_order) |>
+  reorder_y_axis_labels(rev(label_order))
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Pseudobulk_Correlation/Heatmap.pdf", device = cairo_pdf)
+
+```
