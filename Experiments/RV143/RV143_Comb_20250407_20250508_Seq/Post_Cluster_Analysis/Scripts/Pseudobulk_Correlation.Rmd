@@ -120,7 +120,7 @@ label_order <- names(dictionary_labels)[order(dictionary_labels)]
 
 ```
 
-
+#Plot correlation plot:
 ```{r}
 
 p <- tidyplot(data = correlation_matrix_melted, x = Var1, y = Var2, color = value) |>
@@ -137,3 +137,99 @@ p <- tidyplot(data = correlation_matrix_melted, x = Var1, y = Var2, color = valu
 ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Pseudobulk_Correlation/Heatmap.pdf", device = cairo_pdf)
 
 ```
+
+#Generate pseudoclones (random list of cells assigned to a clone, using the same number of cells as actual clones)
+```{r, include=FALSE}
+
+#Get cell numbers for random assignment:
+table_cell_assignment <- table(seurat_large_lineages$Mini_Library_Assignment)
+
+#Get list of all enriched cell barcodes:
+temporary_list_cells <- colnames(seurat_large_lineages)
+
+#Create dataframe for adding pseudolineages:
+pseudolineage_df <- data.frame(Cell = temporary_list_cells, Pseudolineage = rep(NA, length(temporary_list_cells)))
+
+#Loop across all lineage 'slots':
+
+for (i in 1:length(table_cell_assignment)) {
+  
+  #Sample enough cells for current pseudolineage:
+  sampled_cells <- sample(temporary_list_cells, as.numeric(table_cell_assignment[i]), replace = FALSE)
+  
+  #Add current pseudolineage score to those cells:
+  pseudolineage_df$Pseudolineage[pseudolineage_df$Cell %in% sampled_cells] <- paste0("Pseudolineage ", i)
+  
+  #Remove sampled cells from temporary cell list:
+  temporary_list_cells <- setdiff(temporary_list_cells, sampled_cells)
+  
+  #Remoove sampled cells variable for cleanliness:
+  rm(sampled_cells)
+  
+}
+
+row.names(pseudolineage_df) <- pseudolineage_df$Cell
+
+pseudolineage_df <- pseudolineage_df[,2, drop = FALSE]
+
+#Assign pseudolineage to Seurat object:
+seurat_large_lineages <- AddMetaData(seurat_large_lineages,
+            pseudolineage_df)
+
+```
+
+#Run pseudobulk analysis using pseudolineages:
+```{r, include=FALSE}
+
+Idents(seurat_large_lineages) <- "Pseudolineage"
+
+pseudobulk_object_pseudolineages <- AggregateExpression(seurat_large_lineages)
+
+#Threshold pseudolineage pseudobulk:
+pseudobulk_object_pseudolineages$RNA_thresholded <- pseudobulk_object_pseudolineages$RNA[rowSums(pseudobulk_object_pseudolineages$RNA >= 5) == ncol(pseudobulk_object_pseudolineages$RNA),]
+
+#Normalize pseudolineage pseudobulk:
+pseudobulk_object_pseudolineages$RNA_thresholded <- LogNormalize(pseudobulk_object_pseudolineages$RNA_thresholded)
+
+```
+
+#Run correlation matrix on pseudobulked pseudolineages:
+```{r, include=FALSE}
+
+#Use Spearman since linearity is not important:
+correlation_matrix_pseudolineages <- cor(as.data.frame(pseudobulk_object_pseudolineages$RNA_thresholded), method = "spearman")
+
+#Melt correlation matrix:
+correlation_matrix_pseudolineages_melted <- melt(correlation_matrix_pseudolineages)
+
+#Double check number of cells in each pseudolineage:
+table(seurat_large_lineages$Pseudolineage)x
+
+#Create pseudolineage dictionary:
+
+dictionary_labels_pseudolineage <- table(seurat_large_lineages$Pseudolineage) %>% 
+  {setNames(paste0("Pseudolineage ", seq_along(.), " (cells = ", ., ")"), names(.))}
+
+#Change order for plotting:
+label_order_pseudolineage <- names(dictionary_labels_pseudolineage)[order(dictionary_labels_pseudolineage)]
+
+```
+
+#Plot correlation plot with pseudolineages:
+```{r}
+
+p <- tidyplot(data = correlation_matrix_pseudolineages, x = Var1, y = Var2, color = value) |>
+  add_heatmap() |>
+  adjust_size(width = panel_dimensions[1], height = panel_dimensions[2]) |>
+  adjust_x_axis_title("") |>
+  adjust_y_axis_title("") |>
+  adjust_font(fontsize = font_size, family = font_type) |>
+  adjust_x_axis(labels = dictionary_labels) |>
+  adjust_y_axis(labels = dictionary_labels) |>
+  reorder_x_axis_labels(label_order_pseudolineage) |>
+  reorder_y_axis_labels(rev(label_order_pseudolineage))
+
+ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Pseudobulk_Correlation/Heatmap_Pseudolineages.pdf", device = cairo_pdf)
+
+```
+
