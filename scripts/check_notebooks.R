@@ -1,6 +1,7 @@
 # Parse R chunks without executing them or requiring scientific packages/data.
 # Also works with only base R installed. Run from the repository root.
-files <- list.files("Experiments", pattern = "\\.Rmd$", recursive = TRUE, full.names = TRUE)
+files <- readLines("docs/manuscript_notebooks.txt", warn = FALSE)
+if (any(!file.exists(files))) stop("A listed manuscript notebook is missing.")
 if (!length(files)) stop("Run from the CloneSweeper_Paper repository root.")
 failed <- character()
 for (file in files) {

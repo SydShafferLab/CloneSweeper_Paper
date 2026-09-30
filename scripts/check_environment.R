@@ -1,6 +1,7 @@
 # Run from the repository root. Read-only; no packages are installed.
 cat(R.version.string, "\n")
-files <- list.files("Experiments", pattern = "\\.Rmd$", recursive = TRUE, full.names = TRUE)
+files <- readLines("docs/manuscript_notebooks.txt", warn = FALSE)
+if (any(!file.exists(files))) stop("A listed manuscript notebook is missing.")
 if (!length(files)) stop("Run this script from the CloneSweeper_Paper repository root.")
 text <- unlist(lapply(files, readLines, warn = FALSE))
 hits <- regmatches(text, gregexpr("library\\([A-Za-z][A-Za-z0-9.]*\\)", text))

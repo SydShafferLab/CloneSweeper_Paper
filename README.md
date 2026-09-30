@@ -15,12 +15,12 @@ lineage abundance, recovery-library sequencing, and single-cell RNA analysis (RV
 git clone https://github.com/SydShafferLab/CloneSweeper_Paper.git
 cd CloneSweeper_Paper
 python3 scripts/preflight.py --list
-Rscript examples/barcode_assignment.R
 ```
 
-The small example uses synthetic barcode counts and base R. It demonstrates the
-lineage-assignment rule and checks expected outcomes. It does not reproduce a
-paper figure or validate the full pipeline.
+This guide covers the analyses described in the existing main Figures 1 through 4
+and Supplementary Figures 1 through 3, plus their required processing steps.
+It does not include proposed revision analyses. Older exploratory files remain
+in the repository but are outside the documented manuscript workflow.
 
 ## What is included
 
@@ -38,9 +38,9 @@ paper figure or validate the full pipeline.
 This is an analysis source repository. The current checkout does **not** include
 the sequencing matrices, FlowJo exports, microscope images, most intermediate
 objects, or a pinned original R environment. Full figure reproduction has not
-been verified from a clean checkout. See the [specific outstanding requirements](docs/REPRODUCIBILITY.md).
+been verified from a clean checkout. See the [reproduction status](docs/REPRODUCIBILITY.md).
 
-Notebook working directories are configured through `CLONESWEEPER_EXPERIMENTS`,
+The 19 notebooks listed in the manuscript guide have working directories configured through `CLONESWEEPER_EXPERIMENTS`,
 so they no longer depend on an author's personal Drive path. Scientific analysis
 steps and thresholds are retained. The historical cluster configurations and
 ImageJ macro still need their platform-specific paths configured separately.

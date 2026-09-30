@@ -2,7 +2,8 @@
 
 Paths below are relative to `CLONESWEEPER_EXPERIMENTS`. The required inputs are
 not included in the public checkout. No data accession or download URL is
-recorded here. A complete public reproduction requires a stable data deposit,
+recorded here. This guide covers the inputs for the existing manuscript analyses
+listed in [ANALYSES.md](ANALYSES.md). A complete public reproduction requires a stable data deposit,
 file checksums, and the sample metadata described below.
 
 For exact per-notebook paths and outputs, see [notebooks.json](notebooks.json)
@@ -33,15 +34,6 @@ The shared prefix for this section is
 | `Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv` | Generated spike-in counts and `Cell_Numbers` calibration. |
 | `Post_Cluster_Analysis/Organized_Data/threshold_type_dataframe.csv` | Generated labels for spike-in-calibrated barcode abundance thresholds. |
 | `Post_Cluster_Analysis/Organized_Data/Gibson_Assembly_Sequences_20241212.csv` | Generated recovery oligos. Downstream code extracts barcode bases 50 through 69. Despite the suffix, this is written with `write.table` and read as whitespace-delimited by the Seurat notebook. |
-
-`Compare_RV142_RV143_Barcodes.Rmd` additionally requires
-`RV142/2024_08_14_RV142_RV90_gDNA_BCs/Step_3_All_RevCom_23bp_Promoter_3mm_100Match/Organized_Data/all_data_without_spike_ins.csv`.
-The RV142 data and producing workflow are not included here.
-
-The historical gDNA configuration sets `spike_in_added` to `no`, whereas the
-post-processing notebooks use `spike_in.csv`. Preserve the recorded files and
-reconcile this upstream/downstream distinction with the original run before
-claiming raw-data reproducibility.
 
 ## Recovery-library sequencing
 
@@ -90,7 +82,7 @@ then retains cells with `nFeature_RNA > 200`, `nFeature_RNA < 9000`,
 Barcode assignment then requires exactly one lineage with at least 3 unique
 UMIs and a top-minus-second UMI difference of at least 3. These are separate
 filters. A cell with barcode counts 3 and 2 fails even though only one barcode
-reaches 3. The [synthetic example](../examples/barcode_assignment.R) illustrates this.
+reaches 3.
 
 RNA uses `LogNormalize` with scale factor 10,000, followed by scaling, variable
 gene selection, PCA, neighbors and UMAP over PCs 1 through 10, and clustering at

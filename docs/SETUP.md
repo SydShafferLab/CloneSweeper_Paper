@@ -29,7 +29,7 @@ and peak memory have not been benchmarked from this checkout.
 
 Run these commands in a separate R library for this project. They install
 available versions and do **not** produce a verified historical environment.
-The package checker inventories every notebook, including optional analyses.
+The package checker inventories the 19 notebooks in the manuscript workflow.
 Install only the packages for a chosen notebook if the full set is unnecessary.
 
 ```r
@@ -88,9 +88,8 @@ In RStudio, set the variable before using **Knit**:
 Sys.setenv(CLONESWEEPER_EXPERIMENTS = "/absolute/path/to/Experiments")
 ```
 
-All 23 notebooks use this variable in their setup chunk. Most then work from
-`RV143`; the flow notebook uses `RV124`; the RV142/RV143 comparison uses the
-parent `Experiments` directory. Knitr applies the working directory to subsequent
+The 19 notebooks listed in [ANALYSES.md](ANALYSES.md) use this variable in their
+setup chunk. They work from `RV143`, except the flow notebook, which uses `RV124`. Knitr applies the working directory to subsequent
 chunks. Executing isolated code directly in the R console does not apply that
 setting; knit the notebook or explicitly set the corresponding working directory.
 
@@ -113,10 +112,12 @@ produced earlier within the same notebook is not required at preflight.
 
 HTML goes to `rendered/`. Tables, RDS objects, and exported figures go to the
 notebook's `Organized_Data` or `Plots` directories under the configured data
-root. Some exploratory plots are displayed in the HTML without a separate export.
+root. Some plots are displayed in the HTML without a separate export.
 The flow notebook also exports one PDF per well. See [notebooks.json](notebooks.json) for exact literal
-input and output paths. The manifest is maintained with the source and excludes
-unresolved runtime variables and upstream FASTQ dependencies.
+input and output paths. The manifest covers the 19 manuscript-workflow notebooks and excludes
+unresolved runtime variables and upstream FASTQ dependencies. Legacy notebooks
+can contain additional plots beyond the manuscript panels; the figure map
+identifies the relevant sections.
 
 ## Separate upstream steps
 
@@ -146,7 +147,7 @@ unresolved runtime variables and upstream FASTQ dependencies.
 | `JoinLayers` or `layer` errors | Check Seurat v5 compatibility and object structure |
 | Missing SCENIC cells | Check cell IDs against the enriched Seurat object; do not join by row order |
 | Font/Cairo errors | Install the requested font/graphics support or record an explicit font substitution |
-| Missing `go_bp_sets` | The committed gene-set notebook does not define it; see the recorded execution gaps |
+| Missing `go_bp_sets` | The committed gene-set notebook does not define it; its original definition is required for a complete run |
 
 Do not change thresholds, gene universes, or lineage identities to make a failed
 run complete. Resolve input or version differences and record the decision.
