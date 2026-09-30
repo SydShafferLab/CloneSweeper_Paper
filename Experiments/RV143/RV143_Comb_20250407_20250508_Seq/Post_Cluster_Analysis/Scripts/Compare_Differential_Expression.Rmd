@@ -7,8 +7,16 @@ date: "2025-06-26"
 
 ```{r setup, include=FALSE}
 
-#Run only in chunk:
-knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+#Configure the working directory for all subsequent chunks:
+# CLONESWEEPER_EXPERIMENTS is the directory containing RV124 and RV143.
+# Set it before knitting; see docs/SETUP.md. Existing relative data paths are preserved.
+experiment_root <- Sys.getenv("CLONESWEEPER_EXPERIMENTS")
+if (!nzchar(experiment_root)) {
+  stop("Set CLONESWEEPER_EXPERIMENTS to the absolute path of your Experiments directory.")
+}
+notebook_root <- file.path(experiment_root, "RV143")
+if (!dir.exists(notebook_root)) stop("Missing notebook data directory: ", notebook_root)
+knitr::opts_knit$set(root.dir = normalizePath(notebook_root, mustWork = TRUE))
 
 getwd()
 
