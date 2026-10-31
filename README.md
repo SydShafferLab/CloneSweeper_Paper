@@ -37,8 +37,8 @@ in the repository but are outside the documented manuscript workflow.
 
 | Location | Contents |
 | --- | --- |
-| [RV124](Experiments/RV124/Attempt_3) | Flow cytometry notebook and ImageJ image-processing macro |
-| [RV143 gDNA](Experiments/RV143/2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm) | Barcode pipeline configuration,
+| RV143 Genomic DNA Sequencing |  |
+| RV143 10x Genomics Sequencing | Barcode pipeline configuration |
 
 
 ## Reproduction status
