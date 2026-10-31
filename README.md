@@ -33,6 +33,14 @@ in the repository but are outside the documented manuscript workflow.
 | [docs](docs) | Inputs, dependencies, execution order, figure mapping, and validation status |
 | [scripts](scripts) | Input preflight, package/version check, and notebook syntax check |
 
+## Order of Scripts
+
+| Location | Contents |
+| --- | --- |
+| [RV124](Experiments/RV124/Attempt_3) | Flow cytometry notebook and ImageJ image-processing macro |
+| [RV143 gDNA](Experiments/RV143/2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm) | Barcode pipeline configuration,
+
+
 ## Reproduction status
 
 This is an analysis source repository. The current checkout does **not** include
