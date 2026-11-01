@@ -39,8 +39,7 @@ in the repository but are outside the documented manuscript workflow.
 | --- | --- |
 | RV143 Genomic DNA Sequencing | 1) Run Step 3 from https://github.com/SydShafferLab/BarcodeAnalysis_v2_gDNA/tree/main/ExtractBarcodes/Scripts with paths_and_variables.json
 2) Run Organize_Data.Rmd
-3) Run all other scripts
-|
+3) Run all other scripts |
 | RV143 10x Genomics Sequencing | Barcode pipeline configuration |
 
 
