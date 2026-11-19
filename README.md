@@ -38,7 +38,7 @@ in the repository but are outside the documented manuscript workflow.
 | Location | Contents |
 | --- | --- |
 | RV143 Genomic DNA Sequencing | <ol><li>Run Step 3 from https://github.com/SydShafferLab/BarcodeAnalysis_v2_gDNA/tree/main/ExtractBarcodes/Scripts with paths_and_variables.json</li><li>Run Organize_Data.Rmd</li><li>Run all other scripts</li></ol> |
-| RV143 10x Genomics Sequencing | Barcode pipeline configuration |
+| RV143 10x Genomics Sequencing | <ol><li>Run CellRanger</li><li>Run Step 3 from https://github.com/SydShafferLab/BarcodeAnalysis_v2_10X with CloneSweeper_Paper/Experiments/RV143/RV143_Comb_20250407_20250508_Seq/paths_and_variables.json</li><li>Run CloneSweeper_Paper/Experiments/RV143/RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Scripts/Create_Seurat_Objects.Rmd</li></ol> |
 
 
 ## Reproduction status
