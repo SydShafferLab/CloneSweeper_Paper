@@ -1,8 +1,6 @@
 # Input data and identities
 
-Paths below are relative to `CLONESWEEPER_EXPERIMENTS`. The required inputs are
-not included in the public checkout. No data accession or download URL is
-recorded here. This guide covers the inputs for the existing manuscript analyses
+Paths below are relative to `CLONESWEEPER_EXPERIMENTS`. Single-cell RNA sequencing data is provided on GEO. gDNA, FACS and imaging data is provided on Zotero. This guide covers the inputs for the existing manuscript analyses
 listed in [ANALYSES.md](ANALYSES.md). A complete public reproduction requires a stable data deposit,
 file checksums, and the sample metadata described below.
 
