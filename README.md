@@ -48,11 +48,6 @@ the sequencing matrices, FlowJo exports, microscope images, most intermediate
 objects, or a pinned original R environment. Full figure reproduction has not
 been verified from a clean checkout. See the [reproduction status](docs/REPRODUCIBILITY.md).
 
-The 19 notebooks listed in the manuscript guide have working directories configured through `CLONESWEEPER_EXPERIMENTS`,
-so they no longer depend on an author's personal Drive path. Scientific analysis
-steps and thresholds are retained. The historical cluster configurations and
-ImageJ macro still need their platform-specific paths configured separately.
-
 FASTQ barcode processing is maintained in separate repositories:
 
 - [BarcodeAnalysis_v2_gDNA](https://github.com/SydShafferLab/BarcodeAnalysis_v2_gDNA)
