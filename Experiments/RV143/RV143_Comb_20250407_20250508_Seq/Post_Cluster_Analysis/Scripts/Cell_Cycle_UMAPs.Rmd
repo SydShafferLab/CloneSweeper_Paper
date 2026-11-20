@@ -22,6 +22,8 @@ library(Seurat)
 library(ggplot2)
 library(scattermore)
 library(dplyr)
+library(tidyplots)
+library(reshape2)
 
 library(ggh4x)
 
@@ -35,7 +37,7 @@ set.seed(1)
 
 ```
 
-#Set variable:
+#Set variables:
 ```{r, include=FALSE}
 
 font_size <- 8
@@ -55,6 +57,7 @@ seurat_strict_barcode_requirements <- readRDS("RV143_Comb_20250407_20250508_Seq/
 
 s.genes <- cc.genes$s.genes
 g2m.genes <- cc.genes$g2m.genes
+
 
 ```
 
@@ -367,3 +370,44 @@ ggsave(p, filename = "RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plo
 
 
 ```
+
+#Create dataframe of proportions of cells in untransduced and enriched (Non-Enriched and Enriched in paper)
+```{r, include=FALSE}
+
+cell_cycle_df <- data.frame(Enriched = seurat_strict_barcode_requirements$has_targeted_lineage_barcode, Cell_Cycle_Phase = seurat_strict_barcode_requirements$Phase)
+
+#Use this for plotting:
+cell_cycle_table <- as.data.frame(table(cell_cycle_df))
+
+#Use cast for chi square test:
+cell_cycle_table_cast <- acast(cell_cycle_table, Cell_Cycle_Phase ~ Enriched)
+
+chi_square_cell_cycle <- chisq.test(cell_cycle_table_cast)
+
+```
+
+
+#Plot fraction of cells in different cell cycle states:
+```{r}
+
+cell_cycle_table |>
+  tidyplot(x = Enriched, y = Freq, color = Cell_Cycle_Phase) |>
+  add_barstack_relative() |>
+  adjust_font(fontsize = font_size, family = font_type) |>
+  adjust_x_axis(rotate_labels = 90, labels = c("Non-Enriched", "Enriched")) |>
+  remove_x_axis_title() |>
+  adjust_y_axis_title("Proportion of Cells") |>
+  adjust_legend_title("Cell Cycle Phase") |>
+  reorder_color_labels("G1", "S", "G2M") |>
+  adjust_size(width = 0.5, height = 1.8792, unit = "in") |>
+  save_plot("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Cell_Cycle_UMAPs/Proportion_Cell_Cycle.pdf", device = cairo_pdf)
+
+
+  
+  
+
+```
+
+
+
+
