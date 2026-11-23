@@ -1,0 +1,305 @@
+---
+title: "Sensitivity_Analysis_Lineage_Assignment"
+output: html_document
+date: "2026-06-10"
+---
+
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(Seurat)
+library(tidyverse)
+
+library(reshape2)
+library(tidyplots)
+
+library(stringr)
+
+library(Cairo)
+
+```
+
+#Set variables:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+#Load data from counts:
+```{r, include=FALSE}
+
+counts_untransduced <- Read10X("RV143_Comb_20250407_20250508_Seq/20250518_RV143_Enrichment_counts_untransduced/outs/raw_feature_bc_matrix")
+
+counts_enriched <- Read10X("RV143_Comb_20250407_20250508_Seq/20250518_RV143_Enrichment_counts_enriched/outs/raw_feature_bc_matrix")
+
+```
+
+
+#Create Seurat objects:
+```{r, include=FALSE}
+
+seurat_object_untransduced <- CreateSeuratObject(counts = counts_untransduced, project = "Untransduced", min.cells = 3, min.features = 200)
+
+seurat_object_enriched <- CreateSeuratObject(counts = counts_enriched, project = "Enriched", min.cells = 3, min.features = 200)
+
+```
+
+#Plot features for filtering:
+```{r}
+
+seurat_object_untransduced[["percent.mt"]] <- PercentageFeatureSet(seurat_object_untransduced, pattern = "^MT-")
+VlnPlot(seurat_object_untransduced, layer = "counts", features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+seurat_object_enriched[["percent.mt"]] <- PercentageFeatureSet(seurat_object_enriched, pattern = "^MT-")
+VlnPlot(seurat_object_enriched, layer = "counts", features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), ncol = 3)
+
+```
+
+Filter cells in Seurat objects and remove original matrices:
+```{r, include=FALSE}
+
+seurat_object_untransduced_standard_filter <- subset(seurat_object_untransduced, subset = nFeature_RNA > 200 & nFeature_RNA < 9000 & nCount_RNA > 10000 & percent.mt < 10)
+
+rm(seurat_object_untransduced)
+
+seurat_object_enriched_standard_filter <- subset(seurat_object_enriched, subset = nFeature_RNA > 200 & nFeature_RNA < 9000 & nCount_RNA > 10000 & percent.mt < 10)
+
+rm(seurat_object_enriched)
+
+```
+
+
+#Load barcode count dataframe:
+```{r, include=FALSE}
+
+barcode_data <- read.table("RV143_Comb_20250407_20250508_Seq/20250520_Unmapped/EB_output_modified.txt")
+
+colnames(barcode_data) <- c("Cell_Barcode","UMI","Lineage_Barcode","StartSeq_Type","Sample")
+
+```
+
+#Get counts of each UMI per cell barcode, lineage barcode combination, this will be added to the seurat object as an assay:
+```{r, include=FALSE}
+
+#Do this for untransduced cells:
+
+#Subset untransduced cells:
+barcode_data_untransduced <- barcode_data[barcode_data$Sample == "untransduced_step1_unmapped.txt",]
+
+#Do this for 
+lineage_counts_untransduced <- barcode_data_untransduced %>%
+  # Group by Cell_Barcode and Lineage_Barcode
+  group_by(Lineage_Barcode, Cell_Barcode) %>%
+  # Count unique UMIs
+  summarize(count = n_distinct(UMI)) %>%
+  # Ungroup
+  ungroup() %>%
+  # Pivot wider to create matrix-like format needed for Seurat
+  pivot_wider(
+    names_from = Cell_Barcode,
+    values_from = count,
+    values_fill = 0
+  ) %>%
+  # Convert Cell_Barcode to row names
+  column_to_rownames("Lineage_Barcode")
+
+
+
+#Subset enriched cells:
+barcode_data_enriched <- barcode_data[barcode_data$Sample == "enriched_step1_unmapped.txt",]
+
+#Do this for 
+lineage_counts_enriched <- barcode_data_enriched %>%
+  # Group by Cell_Barcode and Lineage_Barcode
+  group_by(Lineage_Barcode, Cell_Barcode) %>%
+  # Count unique UMIs
+  summarize(count = n_distinct(UMI)) %>%
+  # Ungroup
+  ungroup() %>%
+  # Pivot wider to create matrix-like format needed for Seurat
+  pivot_wider(
+    names_from = Cell_Barcode,
+    values_from = count,
+    values_fill = 0
+  ) %>%
+  # Convert Cell_Barcode to row names
+  column_to_rownames("Lineage_Barcode")
+
+#Remove original barcode data to save memory:
+rm(barcode_data)
+
+```
+
+
+#Add a row of zeros for cell barcodes without any lineage barcodes, necessary to add it to the Seurat object:
+```{r, include=FALSE}
+
+#Do this for untransduced:
+
+# Add any missing cell barcodes as columns with zeros
+missing_cols <- setdiff(colnames(seurat_object_untransduced_standard_filter), colnames(lineage_counts_untransduced))
+if(length(missing_cols) > 0) {
+  zero_matrix <- matrix(0, 
+                       nrow = nrow(lineage_counts_untransduced), 
+                       ncol = length(missing_cols),
+                       dimnames = list(rownames(lineage_counts_untransduced), missing_cols))
+  barcode_data_untransduced_complete <- cbind(lineage_counts_untransduced, zero_matrix)
+}
+
+# Sort columns to match Seurat object order
+barcode_data_untransduced_complete <- barcode_data_untransduced_complete[, colnames(seurat_object_untransduced_standard_filter)]
+
+#Do this for enriched:
+
+# Add any missing cell barcodes as columns with zeros
+missing_cols <- setdiff(colnames(seurat_object_enriched_standard_filter), colnames(lineage_counts_enriched))
+if(length(missing_cols) > 0) {
+  zero_matrix <- matrix(0, 
+                       nrow = nrow(lineage_counts_enriched), 
+                       ncol = length(missing_cols),
+                       dimnames = list(rownames(lineage_counts_enriched), missing_cols))
+  barcode_data_enriched_complete <- cbind(lineage_counts_enriched, zero_matrix)
+}
+
+# Sort columns to match Seurat object order
+barcode_data_enriched_complete <- barcode_data_enriched_complete[, colnames(seurat_object_enriched_standard_filter)]
+
+```
+
+#Add lineage barcode assay (counts) to the Seurat objects:
+```{r, include=FALSE}
+
+# Add lineage dataframe as an assay:
+
+seurat_object_untransduced_standard_filter[["Lineage_Assay"]] <- CreateAssayObject(counts = barcode_data_untransduced_complete)
+
+rm(barcode_data_untransduced_complete)
+
+
+seurat_object_enriched_standard_filter[["Lineage_Assay"]] <- CreateAssayObject(counts = barcode_data_enriched_complete)
+
+rm(barcode_data_enriched_complete, barcode_data_enriched, barcode_data_untransduced, lineage_counts_enriched, lineage_counts_untransduced, zero_matrix, missing_cols)
+
+```
+
+#Combine Seurat objects:
+```{r, include=FALSE}
+
+seurat_object_merged <- merge(seurat_object_untransduced_standard_filter, y = seurat_object_enriched_standard_filter, add.cell.ids = c("Untransduced", "Enriched"), project = "RV143")
+
+```
+
+#Remove original seurat objects for space:
+```{r, include=FALSE}
+
+rm(seurat_object_untransduced_standard_filter,seurat_object_enriched_standard_filter)
+
+```
+
+#Get maximum UMI barcode counts per cell:
+```{r, include=FALSE}
+
+seurat_object_merged$max_lineage_bc_umi_per_cell <- apply(seurat_object_merged[["Lineage_Assay"]]@counts, 2, max)
+
+#In Create_Seurat_Object the above is not measured but we check if any values are above a threshold:
+#cells_with_threshold_or_more_umis_lineage_barcodes <- colnames(lineage_barcode_data)[Matrix::colSums(lineage_barcode_data >= lineage_barcode_umi_threshold) >= 1]
+
+```
+
+#Get the difference between max and second max lineage barcode:
+```{r, include=FALSE}
+
+lineage_barcode_data <- GetAssayData(seurat_object_merged, assay = "Lineage_Assay", layer = "counts")
+
+seurat_object_merged$max_second_max_diff_umi_barcodes <- apply(lineage_barcode_data, 2, function(cell) {
+  sorted_umis <- sort(cell, decreasing = TRUE)
+  if (length(sorted_umis) >= 2) {
+    return(sorted_umis[1] - sorted_umis[2])
+  } else if (length(sorted_umis) == 1) {
+    return(sorted_umis[1])  # Only one barcode present
+  } else {
+    return(0)  # No barcodes present
+  }
+})
+
+rm(lineage_barcode_data)
+
+```
+
+#Create a joint dataframe with max umi count and difference between max and second max lineage barcode for simultaneous analysis:
+```{r, include=FALSE}
+
+sensitivity_analysis_df <- data.frame(Max_Lineage_BC_UMI_Count = seurat_object_merged$max_lineage_bc_umi_per_cell, Diff_Max_Second_Max_UMI_Count = seurat_object_merged$max_second_max_diff_umi_barcodes)
+
+#Check a cell for values:
+seurat_object_merged[["Lineage_Assay"]]@counts[seurat_object_merged[["Lineage_Assay"]]@counts[,1]>0, 1]
+
+```
+
+#Create matrix for thesholds:
+```{r, include=FALSE}
+
+thresholds <- 1:15
+
+detection_matrix <- outer(thresholds, thresholds, FUN = Vectorize(function(t1, t2) {
+  mean(sensitivity_analysis_df[["Max_Lineage_BC_UMI_Count"]] >= t1 & 
+       sensitivity_analysis_df[["Diff_Max_Second_Max_UMI_Count"]] >= t2) * 100
+}))
+
+rownames(detection_matrix) <- paste0("Max_Lineage_BC_UMI_Count=", thresholds)
+colnames(detection_matrix) <- paste0("Diff_Max_Second_Max_UMI_Count>=", thresholds)
+
+```
+
+#Melt dataframe:
+```{r, include=FALSE}
+
+detection_matrix_melted <- melt(detection_matrix)
+
+colnames(detection_matrix_melted) <- c("Max_Lineage_BC_UMI_Count_Threshold", "Diff_Max_Second_Max_UMI_Count_Threshold", "Detection_Percent")
+
+sub(".*[^0-9](\\d+)$", "\\1", detection_matrix_melted$Max_Lineage_BC_UMI_Count_Threshold)
+
+#Change columns to numerics:
+detection_matrix_melted$Max_Lineage_BC_UMI_Count_Threshold <- as.numeric(sub(".*[^0-9](\\d+)$", "\\1", detection_matrix_melted$Max_Lineage_BC_UMI_Count_Threshold)
+)
+
+detection_matrix_melted$Diff_Max_Second_Max_UMI_Count_Threshold <- as.numeric(sub(".*[^0-9](\\d+)$", "\\1", detection_matrix_melted$Diff_Max_Second_Max_UMI_Count_Threshold))
+
+```
+
+
+#Create heatmap:
+```{r}
+
+detection_matrix_melted |> 
+  tidyplot(x = Max_Lineage_BC_UMI_Count_Threshold, y = Diff_Max_Second_Max_UMI_Count_Threshold, color = Detection_Percent) |> 
+  add_heatmap(rotate_labels = 0) |>
+  adjust_legend_title("Cells with Detected Lineage Barcode (%)") |>
+  adjust_font(fontsize = font_size, family = font_type) |>
+  adjust_x_axis_title("Min. UMI Count of\nMax. Count in Cell") |>
+  adjust_y_axis_title("Min. Difference Between\nMax. and Second Max.\nUMI Count In Cell") |>
+  adjust_colors(limits = c(0, 100)) |>
+  adjust_size(width = 25, height = 25, unit = "mm") |>
+  save_plot("RV143_Comb_20250407_20250508_Seq/Post_Cluster_Analysis/Plots/Sensitivity_Analysis_Lineage_Assignment/Heatmap_Percentage.pdf", device = cairo_pdf)
+
+```
+
+
+
+
+
