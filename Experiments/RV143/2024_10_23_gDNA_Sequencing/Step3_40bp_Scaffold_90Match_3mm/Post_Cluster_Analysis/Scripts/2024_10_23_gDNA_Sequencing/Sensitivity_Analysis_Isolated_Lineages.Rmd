@@ -1,0 +1,112 @@
+---
+title: "Sensitivity_Analysis_Isolated_Lineages"
+output: html_document
+date: "2026-06-12"
+---
+
+```{r setup, include=FALSE}
+
+#Run only in chunk:
+knitr::opts_knit$set(root.dir = '/Users/robertvandervelde/Library/CloudStorage/GoogleDrive-robertvandervelde@sydshafferlab.com/My Drive/Vander_Velde_Share/Experiments/RV143')
+
+getwd()
+
+```
+
+#Load Libraries:
+```{r, include=FALSE}
+
+rm(list = ls())
+library(reshape2)
+library(tidyplots)
+
+library(Cairo)
+
+```
+
+#Set variables:
+```{r, include=FALSE}
+
+font_size <- 8
+font_type <- "Helvetica Neue"
+
+```
+
+#Define functions:
+```{r, include=FALSE}
+
+#Define revcomp function:
+revcomp <- function(seq) {
+  chartr("ATCG", "TAGC", paste(rev(strsplit(seq, "")[[1]]), collapse=""))
+}
+
+```
+
+#Load the gDNA barcode data:
+```{r, include=FALSE}
+
+gDNA_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/counts_without_spike_ins.csv", row.names = 1)
+
+#Get reverse complement for barcode names:
+rownames(gDNA_counts) <- sapply(rownames(gDNA_counts), revcomp)
+
+#Load spike-ins:
+spike_in_counts <- read.csv("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Organized_Data/spike_in_counts.csv", row.names = 1)
+
+#Get reverse complement for barcode names:
+rownames(spike_in_counts) <- sapply(rownames(spike_in_counts), revcomp)
+
+```
+
+#Normalize using 200 cell 'rung' of spike-in ladder:
+```{r, include=FALSE}
+
+#Get 200 mean for normalization:
+spike_in_200_means <- colMeans(spike_in_counts[spike_in_counts$Cell_Numbers==200,][c(1:6)])
+
+
+gDNA_normalized <- data.frame( X2A = gDNA_counts$X2A/spike_in_200_means[["X2A"]], X2B = gDNA_counts$X2B/spike_in_200_means[["X2B"]] )
+
+
+```
+
+#Get dataframe using various thresholds for number of isolated barcodes:
+```{r, include=FALSE}
+
+#Test to make sure 21 is the result:
+sum(gDNA_normalized$X2A >= 1 & gDNA_normalized$X2B >= 1)
+
+sum(gDNA_normalized$X2A >= 1.5 & gDNA_normalized$X2B >= 1.5)
+
+#Set range of normalization to check:
+range_isolation_threshold <- seq(0.1, 10.1, by = 0.1)
+
+#Create list using various thresholds:
+number_of_theoretically_enriched_lineages <- sapply(range_isolation_threshold, function(t) {
+  sum(gDNA_normalized$X2A >= t & gDNA_normalized$X2B >= t)
+})
+
+#Create dataframe with thresholds:
+threshold_df <- data.frame(Normalized_To_200 = range_isolation_threshold, Theoretically_Enriched_Lineages = number_of_theoretically_enriched_lineages)
+
+
+```
+
+#Plot theoretically enriched lineages:
+```{r}
+
+threshold_df |> 
+  tidyplot(x = Normalized_To_200, y = Theoretically_Enriched_Lineages) |>
+  add_data_points(color = "black") |>
+  add_reference_lines(x=1, y=21) |>
+  adjust_font(fontsize = font_size, family = font_type) |>
+  adjust_x_axis_title("Threshsold Relative to 200 Cell Rung") |>
+  adjust_y_axis_title("Number of Lineages") |>
+  adjust_x_axis(limits = c(0,NA)) |>
+  adjust_y_axis(limits = c(0,max(threshold_df$Theoretically_Enriched_Lineages) * 1.1)) |>
+  adjust_size(width = 1.4063, height = 1.4063, unit = "in") |>
+  save_plot("2024_10_23_gDNA_Sequencing/Step3_40bp_Scaffold_90Match_3mm/Post_Cluster_Analysis/Plots/Sensitivity_Analysis_Isolated_Lineages/Scatter_Plot.pdf", device = cairo_pdf)
+
+
+
+```
