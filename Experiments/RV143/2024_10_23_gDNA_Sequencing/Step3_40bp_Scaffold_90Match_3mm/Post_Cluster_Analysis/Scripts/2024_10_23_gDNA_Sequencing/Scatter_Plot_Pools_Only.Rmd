@@ -73,6 +73,30 @@ gDNA_percentage$above_threshold_pool2_percentage <- threshold_info$X2A == "Two_H
 
 ```
 
+#Get spearman correlation coefficients:
+```{r}
+
+cor(gDNA_counts$X1A, gDNA_counts$X1B, method = "spearman")
+cor(gDNA_counts$X2A, gDNA_counts$X2B, method = "spearman")
+
+cor(gDNA_percentage$X1A, gDNA_percentage$X1B, method = "spearman")
+cor(gDNA_percentage$X2A, gDNA_percentage$X2B, method = "spearman")
+
+cor(gDNA_counts$X1A, gDNA_counts$X1B, method = "pearson")
+cor(gDNA_counts$X2A, gDNA_counts$X2B, method = "pearson")
+
+cor(gDNA_percentage$X1A, gDNA_percentage$X1B, method = "pearson")
+cor(gDNA_percentage$X2A, gDNA_percentage$X2B, method = "pearson")
+
+#Get gDNA_counts in at least one branch of a pool:
+gDNA_counts_above_threshold_pool_1 <- gDNA_counts[gDNA_counts$X1A > 0 | gDNA_counts$X1B > 0,]
+cor(gDNA_counts_above_threshold_pool_1$X1A, gDNA_counts_above_threshold_pool_1$X1B, method = "spearman")
+
+gDNA_counts_above_threshold_pool_2 <- gDNA_counts[gDNA_counts$X2A > 0 | gDNA_counts$X2B > 0,]
+cor(gDNA_counts_above_threshold_pool_2$X2A, gDNA_counts_above_threshold_pool_2$X2B, method = "spearman")
+
+
+```
 
 
 #Plot pool 2, percentages:
